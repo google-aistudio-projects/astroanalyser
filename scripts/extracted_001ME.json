@@ -30,34 +30,23 @@
     {
       "person_id": "001ME",
       "chart_type": "D1",
+      "body_name": "Venus (Sukra)",
+      "rashi_name": "Dhanus (Sagittarius)",
+      "house_number": 1,
+      "nakshatra_name": "Mula",
+      "pada": 2,
+      "degree_sputa": "06° 08'",
+      "is_retrograde": false
+    },
+    {
+      "person_id": "001ME",
+      "chart_type": "D1",
       "body_name": "Sun (Surya)",
       "rashi_name": "Makaram (Capricorn)",
       "house_number": 2,
       "nakshatra_name": "Shravana",
       "pada": 1,
       "degree_sputa": "11° 37'",
-      "is_retrograde": false
-    },
-    {
-      "person_id": "001ME",
-      "chart_type": "D1",
-      "body_name": "Moon (Chandra)",
-      "rashi_name": "Vrischigam (Scorpio)",
-      "house_number": 12,
-      "nakshatra_name": "Anuradha",
-      "pada": 2,
-      "degree_sputa": "07° 24'",
-      "is_retrograde": false
-    },
-    {
-      "person_id": "001ME",
-      "chart_type": "D1",
-      "body_name": "Mars (Sevvai)",
-      "rashi_name": "Rishabam (Taurus)",
-      "house_number": 6,
-      "nakshatra_name": "Rohini",
-      "pada": 4,
-      "degree_sputa": "21° 23'",
       "is_retrograde": false
     },
     {
@@ -85,12 +74,23 @@
     {
       "person_id": "001ME",
       "chart_type": "D1",
-      "body_name": "Venus (Sukra)",
-      "rashi_name": "Dhanus (Sagittarius)",
-      "house_number": 1,
-      "nakshatra_name": "Mula",
-      "pada": 2,
-      "degree_sputa": "06° 08'",
+      "body_name": "Ketu",
+      "rashi_name": "Mesham (Aries)",
+      "house_number": 5,
+      "nakshatra_name": "Bharani",
+      "pada": 4,
+      "degree_sputa": "24° 25'",
+      "is_retrograde": false
+    },
+    {
+      "person_id": "001ME",
+      "chart_type": "D1",
+      "body_name": "Mars (Sevvai)",
+      "rashi_name": "Rishabam (Taurus)",
+      "house_number": 6,
+      "nakshatra_name": "Rohini",
+      "pada": 4,
+      "degree_sputa": "21° 23'",
       "is_retrograde": false
     },
     {
@@ -107,6 +107,17 @@
     {
       "person_id": "001ME",
       "chart_type": "D1",
+      "body_name": "Mandi (Gulika)",
+      "rashi_name": "Kanni (Virgo)",
+      "house_number": 10,
+      "nakshatra_name": "Hasta",
+      "pada": 2,
+      "degree_sputa": "14° 42'",
+      "is_retrograde": false
+    },
+    {
+      "person_id": "001ME",
+      "chart_type": "D1",
       "body_name": "Rahu",
       "rashi_name": "Thulaam (Libra)",
       "house_number": 11,
@@ -118,23 +129,12 @@
     {
       "person_id": "001ME",
       "chart_type": "D1",
-      "body_name": "Ketu",
-      "rashi_name": "Mesham (Aries)",
-      "house_number": 5,
-      "nakshatra_name": "Bharani",
-      "pada": 4,
-      "degree_sputa": "24° 25'",
-      "is_retrograde": false
-    },
-    {
-      "person_id": "001ME",
-      "chart_type": "D1",
-      "body_name": "Mandi (Gulika)",
-      "rashi_name": "Kanni (Virgo)",
-      "house_number": 10,
-      "nakshatra_name": "Hasta",
+      "body_name": "Moon (Chandra)",
+      "rashi_name": "Vrischigam (Scorpio)",
+      "house_number": 12,
+      "nakshatra_name": "Anuradha",
       "pada": 2,
-      "degree_sputa": "14° 42'",
+      "degree_sputa": "07° 24'",
       "is_retrograde": false
     },
     {
@@ -151,13 +151,13 @@
     {
       "person_id": "001ME",
       "chart_type": "D9",
-      "body_name": "Sun (Surya)",
-      "rashi_name": "Mesham (Aries)",
-      "house_number": 9,
+      "body_name": "Saturn (Sani)",
+      "rashi_name": "Simham (Leo)",
+      "house_number": 1,
       "nakshatra_name": null,
       "pada": null,
       "degree_sputa": null,
-      "is_retrograde": false
+      "is_retrograde": true
     },
     {
       "person_id": "001ME",
@@ -173,9 +173,9 @@
     {
       "person_id": "001ME",
       "chart_type": "D9",
-      "body_name": "Mars (Sevvai)",
-      "rashi_name": "Katakam (Cancer)",
-      "house_number": 12,
+      "body_name": "Ketu",
+      "rashi_name": "Vrischigam (Scorpio)",
+      "house_number": 4,
       "nakshatra_name": null,
       "pada": null,
       "degree_sputa": null,
@@ -206,6 +206,17 @@
     {
       "person_id": "001ME",
       "chart_type": "D9",
+      "body_name": "Sun (Surya)",
+      "rashi_name": "Mesham (Aries)",
+      "house_number": 9,
+      "nakshatra_name": null,
+      "pada": null,
+      "degree_sputa": null,
+      "is_retrograde": false
+    },
+    {
+      "person_id": "001ME",
+      "chart_type": "D9",
       "body_name": "Venus (Sukra)",
       "rashi_name": "Rishabam (Taurus)",
       "house_number": 10,
@@ -217,13 +228,13 @@
     {
       "person_id": "001ME",
       "chart_type": "D9",
-      "body_name": "Saturn (Sani)",
-      "rashi_name": "Simham (Leo)",
-      "house_number": 1,
+      "body_name": "Mandi (Gulika)",
+      "rashi_name": "Rishabam (Taurus)",
+      "house_number": 10,
       "nakshatra_name": null,
       "pada": null,
       "degree_sputa": null,
-      "is_retrograde": true
+      "is_retrograde": false
     },
     {
       "person_id": "001ME",
@@ -239,20 +250,9 @@
     {
       "person_id": "001ME",
       "chart_type": "D9",
-      "body_name": "Ketu",
-      "rashi_name": "Vrischigam (Scorpio)",
-      "house_number": 4,
-      "nakshatra_name": null,
-      "pada": null,
-      "degree_sputa": null,
-      "is_retrograde": false
-    },
-    {
-      "person_id": "001ME",
-      "chart_type": "D9",
-      "body_name": "Mandi (Gulika)",
-      "rashi_name": "Rishabam (Taurus)",
-      "house_number": 10,
+      "body_name": "Mars (Sevvai)",
+      "rashi_name": "Katakam (Cancer)",
+      "house_number": 12,
       "nakshatra_name": null,
       "pada": null,
       "degree_sputa": null,

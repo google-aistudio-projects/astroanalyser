@@ -1017,7 +1017,7 @@ def main():
               <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
                 <div className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
                   <Server className="w-3.5 h-3.5" />
-                  Quick Setup &amp; Execution Guide
+                  Quick Setup &amp; Execution Guide (Config-Driven)
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
                   <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
@@ -1027,17 +1027,40 @@ def main():
                     </code>
                   </div>
                   <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                    <div className="font-bold text-slate-200 mb-1">2. Run Extraction &amp; Ingest</div>
+                    <div className="font-bold text-slate-200 mb-1">2. Edit config.ini</div>
                     <code className="text-[11px] text-amber-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto">
-                      python extract_tamil_horoscope.py --pdf horoscope.pdf --dbname vedic_astro
+                      Set host, dbname, user, password in config.ini
                     </code>
                   </div>
                   <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                    <div className="font-bold text-slate-200 mb-1">3. Dry-Run / Export Dump</div>
-                    <code className="text-[11px] text-amber-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto">
-                      python extract_tamil_horoscope.py --dry-run --export-sql output.sql
+                    <div className="font-bold text-slate-200 mb-1">3. Just Run The Script!</div>
+                    <code className="text-[11px] text-emerald-400 bg-slate-950 px-2 py-1 rounded block overflow-x-auto font-bold">
+                      python3 run_ingestion.py
                     </code>
                   </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-slate-800/80">
+                  <div className="text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                    <span>📄 Configuration File: <code className="text-amber-400">config.ini</code></span>
+                    <span className="text-[10px] text-slate-400">Zero command-line flags needed</span>
+                  </div>
+                  <pre className="bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+{`[database]
+host = localhost
+port = 5432
+dbname = vedic_astro
+user = postgres
+password = postgres
+
+[pdf]
+pdf_path = horoscope.pdf
+
+[options]
+dry_run = false
+export_sql = scripts/insert_001ME.sql
+export_json = scripts/extracted_001ME.json`}
+                  </pre>
                 </div>
               </div>
 
