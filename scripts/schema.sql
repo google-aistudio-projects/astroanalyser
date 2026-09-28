@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS natal_placement_detail (
     pada INTEGER,
     degree_sputa VARCHAR(20),
     is_retrograde BOOLEAN DEFAULT FALSE,
-    UNIQUE (person_id, chart_type, body_name)
+    CONSTRAINT uq_natal_person_chart_body UNIQUE (person_id, chart_type, body_name)
 );
 
 CREATE TABLE IF NOT EXISTS vimshottari_dasha_detail (

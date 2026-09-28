@@ -609,6 +609,26 @@ def ingest_to_postgres(db_params: Dict[str, Any],
             end_date DATE NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Ensure UNIQUE constraint exists if table pre-existed without it
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint 
+                WHERE conrelid = 'natal_placement_detail'::regclass 
+                  AND contype = 'u'
+                  AND conname = 'uq_natal_person_chart_body'
+            ) THEN
+                BEGIN
+                    ALTER TABLE natal_placement_detail 
+                    ADD CONSTRAINT uq_natal_person_chart_body 
+                    UNIQUE (person_id, chart_type, body_name);
+                EXCEPTION WHEN duplicate_table OR duplicate_object THEN
+                    -- Constraint already satisfied
+                    NULL;
+                END;
+            END IF;
+        END $$;
         """)
 
         # 2. Ingest person_master (Upsert)
@@ -642,19 +662,14 @@ def ingest_to_postgres(db_params: Dict[str, Any],
         """, person)
 
         # 3. Ingest natal_placement_detail (D1 & D9)
-        print(f"Upserting {len(placements)} natal placements (D1 & D9 with relative house numbers)...")
+        # Clean delete for this person's placements first to safely handle pre-existing tables without unique indexes
+        print(f"Ingesting {len(placements)} natal placements (D1 & D9 with relative house numbers)...")
+        cur.execute("DELETE FROM natal_placement_detail WHERE person_id = %s;", (person["person_id"],))
         placement_query = """
             INSERT INTO natal_placement_detail (
                 person_id, chart_type, body_name, rashi_name,
                 house_number, nakshatra_name, pada, degree_sputa, is_retrograde
-            ) VALUES %s
-            ON CONFLICT (person_id, chart_type, body_name) DO UPDATE SET
-                rashi_name = EXCLUDED.rashi_name,
-                house_number = EXCLUDED.house_number,
-                nakshatra_name = EXCLUDED.nakshatra_name,
-                pada = EXCLUDED.pada,
-                degree_sputa = EXCLUDED.degree_sputa,
-                is_retrograde = EXCLUDED.is_retrograde;
+            ) VALUES %s;
         """
         placement_tuples = [
             (
