@@ -1,0 +1,403 @@
+import { samplePersonMaster, sampleNatalPlacements, PersonMaster, NatalPlacement } from './horoscopeData';
+
+export interface UserQueryLog {
+  id?: number;
+  query_id: string;
+  running_number: number;
+  person_id: string;
+  start_date: string;
+  end_date: string;
+  created_at?: string;
+  response_payload: HoroscopeApiResponse;
+}
+
+export interface DashaIntervalItem {
+  sequence_index: number;
+  mahadasha_lord_md: string;
+  antardasha_lord_ad: string;
+  pratyantardasha_lord_pd: string;
+  full_lord_hierarchy: string;
+  start_date: string;
+  end_date: string;
+  duration_days: number | null;
+}
+
+export interface HoroscopeApiResponse {
+  unique_response_id: string;
+  running_number: number;
+  person_id: string;
+  requested_timeline: {
+    start_date: string;
+    end_date: string;
+    span_years: number | null;
+  };
+  person_profile: PersonMaster;
+  natal_placements: {
+    D1_rashi_chart: {
+      count: number;
+      lagna_sign: string;
+      bodies: NatalPlacement[];
+    };
+    D9_navamsha_chart: {
+      count: number;
+      bodies: NatalPlacement[];
+    };
+  };
+  vimshottari_dasha_intervals: {
+    total_intervals_count: number;
+    granularity: string;
+    intervals: DashaIntervalItem[];
+  };
+  server_timestamp: string;
+  persisted_in_database: {
+    table: string;
+    running_number_cycle: string;
+    status: string;
+  };
+}
+
+// Master list of Vimshottari intervals covering 1976 through 2090
+export const ALL_DASHA_TIMELINE: [string, string, string, string, string][] = [
+  // Saturn MD (1976 - 1989)
+  ["Saturn (Sani)", "Ketu", "Venus (Sukra)", "1976-01-26", "1976-03-14"],
+  ["Saturn (Sani)", "Ketu", "Sun (Surya)", "1976-03-14", "1976-04-04"],
+  ["Saturn (Sani)", "Ketu", "Moon (Chandra)", "1976-04-04", "1976-05-07"],
+  ["Saturn (Sani)", "Ketu", "Mars (Sevvai)", "1976-05-07", "1976-05-30"],
+  ["Saturn (Sani)", "Ketu", "Rahu", "1976-05-30", "1976-07-30"],
+  ["Saturn (Sani)", "Ketu", "Jupiter (Guru)", "1976-07-30", "1976-09-23"],
+  ["Saturn (Sani)", "Ketu", "Saturn (Sani)", "1976-09-23", "1976-11-27"],
+  ["Saturn (Sani)", "Ketu", "Mercury (Budha)", "1976-11-27", "1977-01-23"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Venus (Sukra)", "1977-01-23", "1977-08-03"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Sun (Surya)", "1977-08-03", "1977-09-30"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Moon (Chandra)", "1977-09-30", "1978-01-05"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Mars (Sevvai)", "1978-01-05", "1978-03-12"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Rahu", "1978-03-12", "1978-09-03"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Jupiter (Guru)", "1978-09-03", "1979-02-05"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Saturn (Sani)", "1979-02-05", "1979-08-05"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Mercury (Budha)", "1979-08-05", "1980-01-17"],
+  ["Saturn (Sani)", "Venus (Sukra)", "Ketu", "1980-01-17", "1980-03-23"],
+  ["Saturn (Sani)", "Sun (Surya)", "Sun (Surya)", "1980-03-23", "1980-04-10"],
+  ["Saturn (Sani)", "Sun (Surya)", "Moon (Chandra)", "1980-04-10", "1980-05-09"],
+  ["Saturn (Sani)", "Sun (Surya)", "Mars (Sevvai)", "1980-05-09", "1980-05-29"],
+  ["Saturn (Sani)", "Sun (Surya)", "Rahu", "1980-05-29", "1980-07-20"],
+  ["Saturn (Sani)", "Sun (Surya)", "Jupiter (Guru)", "1980-07-20", "1980-09-05"],
+  ["Saturn (Sani)", "Sun (Surya)", "Saturn (Sani)", "1980-09-05", "1980-10-30"],
+  ["Saturn (Sani)", "Sun (Surya)", "Mercury (Budha)", "1980-10-30", "1980-12-18"],
+  ["Saturn (Sani)", "Sun (Surya)", "Ketu", "1980-12-18", "1981-01-08"],
+  ["Saturn (Sani)", "Sun (Surya)", "Venus (Sukra)", "1981-01-08", "1981-03-05"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Moon (Chandra)", "1981-03-05", "1981-04-23"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Mars (Sevvai)", "1981-04-23", "1981-05-26"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Rahu", "1981-05-26", "1981-08-21"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Jupiter (Guru)", "1981-08-21", "1981-11-07"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Saturn (Sani)", "1981-11-07", "1982-02-08"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Mercury (Budha)", "1982-02-08", "1982-04-28"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Ketu", "1982-04-28", "1982-06-02"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Venus (Sukra)", "1982-06-02", "1982-09-07"],
+  ["Saturn (Sani)", "Moon (Chandra)", "Sun (Surya)", "1982-09-07", "1982-10-05"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Mars (Sevvai)", "1982-10-05", "1982-10-28"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Rahu", "1982-10-28", "1982-12-28"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Jupiter (Guru)", "1982-12-28", "1983-02-21"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Saturn (Sani)", "1983-02-21", "1983-04-25"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Mercury (Budha)", "1983-04-25", "1983-06-21"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Ketu", "1983-06-21", "1983-07-14"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Venus (Sukra)", "1983-07-14", "1983-09-21"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Sun (Surya)", "1983-09-21", "1983-10-11"],
+  ["Saturn (Sani)", "Mars (Sevvai)", "Moon (Chandra)", "1983-10-11", "1983-11-14"],
+  ["Saturn (Sani)", "Rahu", "Rahu", "1983-11-14", "1984-04-18"],
+  ["Saturn (Sani)", "Rahu", "Jupiter (Guru)", "1984-04-18", "1984-09-05"],
+  ["Saturn (Sani)", "Rahu", "Saturn (Sani)", "1984-09-05", "1985-02-17"],
+  ["Saturn (Sani)", "Rahu", "Mercury (Budha)", "1985-02-17", "1985-07-13"],
+  ["Saturn (Sani)", "Rahu", "Ketu", "1985-07-13", "1985-09-12"],
+  ["Saturn (Sani)", "Rahu", "Venus (Sukra)", "1985-09-12", "1986-03-03"],
+  ["Saturn (Sani)", "Rahu", "Sun (Surya)", "1986-03-03", "1986-04-25"],
+  ["Saturn (Sani)", "Rahu", "Moon (Chandra)", "1986-04-25", "1986-07-20"],
+  ["Saturn (Sani)", "Rahu", "Mars (Sevvai)", "1986-07-20", "1986-09-20"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Jupiter (Guru)", "1986-09-20", "1987-01-22"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Saturn (Sani)", "1987-01-22", "1987-06-16"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Mercury (Budha)", "1987-06-16", "1987-10-25"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Ketu", "1987-10-25", "1987-12-18"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Venus (Sukra)", "1987-12-18", "1988-05-20"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Sun (Surya)", "1988-05-20", "1988-07-06"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Moon (Chandra)", "1988-07-06", "1988-09-22"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Mars (Sevvai)", "1988-09-22", "1988-11-15"],
+  ["Saturn (Sani)", "Jupiter (Guru)", "Rahu", "1988-11-15", "1989-04-02"],
+
+  // Mercury MD (1989 - 2006)
+  ["Mercury (Budha)", "Mercury (Budha)", "Mercury (Budha)", "1989-04-02", "1989-08-05"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Ketu", "1989-08-05", "1989-09-25"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Venus (Sukra)", "1989-09-25", "1990-02-20"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Sun (Surya)", "1990-02-20", "1990-04-03"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Moon (Chandra)", "1990-04-03", "1990-06-16"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Mars (Sevvai)", "1990-06-16", "1990-08-06"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Rahu", "1990-08-06", "1990-12-16"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Jupiter (Guru)", "1990-12-16", "1991-04-12"],
+  ["Mercury (Budha)", "Mercury (Budha)", "Saturn (Sani)", "1991-04-12", "1991-08-29"],
+  ["Mercury (Budha)", "Ketu", "Ketu", "1991-08-29", "1991-09-20"],
+  ["Mercury (Budha)", "Ketu", "Venus (Sukra)", "1991-09-20", "1991-11-19"],
+  ["Mercury (Budha)", "Ketu", "Sun (Surya)", "1991-11-19", "1991-12-07"],
+  ["Mercury (Budha)", "Ketu", "Moon (Chandra)", "1991-12-07", "1992-01-07"],
+  ["Mercury (Budha)", "Ketu", "Mars (Sevvai)", "1992-01-07", "1992-01-28"],
+  ["Mercury (Budha)", "Ketu", "Rahu", "1992-01-28", "1992-03-21"],
+  ["Mercury (Budha)", "Ketu", "Jupiter (Guru)", "1992-03-21", "1992-05-09"],
+  ["Mercury (Budha)", "Ketu", "Saturn (Sani)", "1992-05-09", "1992-07-05"],
+  ["Mercury (Budha)", "Ketu", "Mercury (Budha)", "1992-07-05", "1992-08-26"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Venus (Sukra)", "1992-08-26", "1993-02-16"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Sun (Surya)", "1993-02-16", "1993-04-07"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Moon (Chandra)", "1993-04-07", "1993-07-02"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Mars (Sevvai)", "1993-07-02", "1993-09-02"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Rahu", "1993-09-02", "1994-02-05"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Jupiter (Guru)", "1994-02-05", "1994-06-21"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Saturn (Sani)", "1994-06-21", "1994-12-02"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Mercury (Budha)", "1994-12-02", "1995-04-27"],
+  ["Mercury (Budha)", "Venus (Sukra)", "Ketu", "1995-04-27", "1995-06-26"],
+  ["Mercury (Budha)", "Sun (Surya)", "Sun (Surya)", "1995-06-26", "1995-07-11"],
+  ["Mercury (Budha)", "Sun (Surya)", "Moon (Chandra)", "1995-07-11", "1995-08-07"],
+  ["Mercury (Budha)", "Sun (Surya)", "Mars (Sevvai)", "1995-08-07", "1995-08-25"],
+  ["Mercury (Budha)", "Sun (Surya)", "Rahu", "1995-08-25", "1995-10-11"],
+  ["Mercury (Budha)", "Sun (Surya)", "Jupiter (Guru)", "1995-10-11", "1995-11-21"],
+  ["Mercury (Budha)", "Sun (Surya)", "Saturn (Sani)", "1995-11-21", "1996-01-10"],
+  ["Mercury (Budha)", "Sun (Surya)", "Mercury (Budha)", "1996-01-10", "1996-02-23"],
+  ["Mercury (Budha)", "Sun (Surya)", "Ketu", "1996-02-23", "1996-03-11"],
+  ["Mercury (Budha)", "Sun (Surya)", "Venus (Sukra)", "1996-03-11", "1996-05-02"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Moon (Chandra)", "1996-05-02", "1996-06-15"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Mars (Sevvai)", "1996-06-15", "1996-07-14"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Rahu", "1996-07-14", "1996-10-01"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Jupiter (Guru)", "1996-10-01", "1996-12-09"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Saturn (Sani)", "1996-12-09", "1997-03-02"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Mercury (Budha)", "1997-03-02", "1997-05-12"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Ketu", "1997-05-12", "1997-06-12"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Venus (Sukra)", "1997-06-12", "1997-09-07"],
+  ["Mercury (Budha)", "Moon (Chandra)", "Sun (Surya)", "1997-09-07", "1997-10-02"],
+
+  // 1998 through 2020 interval span
+  ["Mercury (Budha)", "Mars (Sevvai)", "Mars (Sevvai)", "1997-10-02", "1997-10-23"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Rahu", "1997-10-23", "1997-12-16"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Jupiter (Guru)", "1997-12-16", "1998-02-04"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Saturn (Sani)", "1998-02-04", "1998-04-01"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Mercury (Budha)", "1998-04-01", "1998-05-21"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Ketu", "1998-05-21", "1998-06-12"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Venus (Sukra)", "1998-06-12", "1998-08-11"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Sun (Surya)", "1998-08-11", "1998-08-29"],
+  ["Mercury (Budha)", "Mars (Sevvai)", "Moon (Chandra)", "1998-08-29", "1998-09-29"],
+  ["Mercury (Budha)", "Rahu", "Rahu", "1998-09-29", "1999-02-17"],
+  ["Mercury (Budha)", "Rahu", "Jupiter (Guru)", "1999-02-17", "1999-06-19"],
+  ["Mercury (Budha)", "Rahu", "Saturn (Sani)", "1999-06-19", "1999-11-14"],
+  ["Mercury (Budha)", "Rahu", "Mercury (Budha)", "1999-11-14", "2000-03-25"],
+  ["Mercury (Budha)", "Rahu", "Ketu", "2000-03-25", "2000-05-18"],
+  ["Mercury (Budha)", "Rahu", "Venus (Sukra)", "2000-05-18", "2000-10-21"],
+  ["Mercury (Budha)", "Rahu", "Sun (Surya)", "2000-10-21", "2000-12-07"],
+  ["Mercury (Budha)", "Rahu", "Moon (Chandra)", "2000-12-07", "2001-02-23"],
+  ["Mercury (Budha)", "Rahu", "Mars (Sevvai)", "2001-02-23", "2001-04-17"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Jupiter (Guru)", "2001-04-17", "2001-08-06"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Saturn (Sani)", "2001-08-06", "2001-12-15"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Mercury (Budha)", "2001-12-15", "2002-04-11"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Ketu", "2002-04-11", "2002-05-28"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Venus (Sukra)", "2002-05-28", "2002-10-14"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Sun (Surya)", "2002-10-14", "2002-11-25"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Moon (Chandra)", "2002-11-25", "2003-02-03"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Mars (Sevvai)", "2003-02-03", "2003-03-21"],
+  ["Mercury (Budha)", "Jupiter (Guru)", "Rahu", "2003-03-21", "2003-07-23"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Saturn (Sani)", "2003-07-23", "2003-12-26"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Mercury (Budha)", "2003-12-26", "2004-05-14"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Ketu", "2004-05-14", "2004-07-10"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Venus (Sukra)", "2004-07-10", "2004-12-22"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Sun (Surya)", "2004-12-22", "2005-02-10"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Moon (Chandra)", "2005-02-10", "2005-05-01"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Mars (Sevvai)", "2005-05-01", "2005-06-27"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Rahu", "2005-06-27", "2005-11-23"],
+  ["Mercury (Budha)", "Saturn (Sani)", "Jupiter (Guru)", "2005-11-23", "2006-04-02"],
+
+  // Ketu MD (2006 - 2013)
+  ["Ketu", "Ketu", "Ketu", "2006-04-02", "2006-04-11"],
+  ["Ketu", "Ketu", "Venus (Sukra)", "2006-04-11", "2006-05-05"],
+  ["Ketu", "Ketu", "Sun (Surya)", "2006-05-05", "2006-05-12"],
+  ["Ketu", "Ketu", "Moon (Chandra)", "2006-05-12", "2006-05-25"],
+  ["Ketu", "Ketu", "Mars (Sevvai)", "2006-05-25", "2006-06-03"],
+  ["Ketu", "Ketu", "Rahu", "2006-06-03", "2006-06-25"],
+  ["Ketu", "Ketu", "Jupiter (Guru)", "2006-06-25", "2006-07-15"],
+  ["Ketu", "Ketu", "Saturn (Sani)", "2006-07-15", "2006-08-08"],
+  ["Ketu", "Ketu", "Mercury (Budha)", "2006-08-08", "2006-08-29"],
+  ["Ketu", "Venus (Sukra)", "Venus (Sukra)", "2006-08-29", "2006-11-09"],
+  ["Ketu", "Venus (Sukra)", "Sun (Surya)", "2006-11-09", "2006-11-30"],
+  ["Ketu", "Venus (Sukra)", "Moon (Chandra)", "2006-11-30", "2007-01-05"],
+  ["Ketu", "Venus (Sukra)", "Mars (Sevvai)", "2007-01-05", "2007-01-30"],
+  ["Ketu", "Venus (Sukra)", "Rahu", "2007-01-30", "2007-04-03"],
+  ["Ketu", "Venus (Sukra)", "Jupiter (Guru)", "2007-04-03", "2007-05-29"],
+  ["Ketu", "Venus (Sukra)", "Saturn (Sani)", "2007-05-29", "2007-08-05"],
+  ["Ketu", "Venus (Sukra)", "Mercury (Budha)", "2007-08-05", "2007-10-05"],
+  ["Ketu", "Venus (Sukra)", "Ketu", "2007-10-05", "2007-10-29"],
+  ["Ketu", "Sun (Surya)", "Sun (Surya)", "2007-10-29", "2007-11-05"],
+  ["Ketu", "Sun (Surya)", "Moon (Chandra)", "2007-11-05", "2007-11-16"],
+  ["Ketu", "Sun (Surya)", "Mars (Sevvai)", "2007-11-16", "2007-11-23"],
+  ["Ketu", "Sun (Surya)", "Rahu", "2007-11-23", "2007-12-12"],
+  ["Ketu", "Sun (Surya)", "Jupiter (Guru)", "2007-12-12", "2007-12-29"],
+  ["Ketu", "Sun (Surya)", "Saturn (Sani)", "2007-12-29", "2008-01-19"],
+  ["Ketu", "Sun (Surya)", "Mercury (Budha)", "2008-01-19", "2008-02-07"],
+  ["Ketu", "Sun (Surya)", "Ketu", "2008-02-07", "2008-02-14"],
+  ["Ketu", "Sun (Surya)", "Venus (Sukra)", "2008-02-14", "2008-03-05"],
+  ["Ketu", "Moon (Chandra)", "Moon (Chandra)", "2008-03-05", "2008-03-23"],
+  ["Ketu", "Moon (Chandra)", "Mars (Sevvai)", "2008-03-23", "2008-04-05"],
+  ["Ketu", "Moon (Chandra)", "Rahu", "2008-04-05", "2008-05-06"],
+  ["Ketu", "Moon (Chandra)", "Jupiter (Guru)", "2008-05-06", "2008-06-04"],
+  ["Ketu", "Moon (Chandra)", "Saturn (Sani)", "2008-06-04", "2008-07-08"],
+  ["Ketu", "Moon (Chandra)", "Mercury (Budha)", "2008-07-08", "2008-08-07"],
+  ["Ketu", "Moon (Chandra)", "Ketu", "2008-08-07", "2008-08-20"],
+  ["Ketu", "Moon (Chandra)", "Venus (Sukra)", "2008-08-20", "2008-09-25"],
+  ["Ketu", "Moon (Chandra)", "Sun (Surya)", "2008-09-25", "2008-10-05"],
+
+  // Venus MD (2013 - 2033)
+  ["Venus (Sukra)", "Venus (Sukra)", "Venus (Sukra)", "2013-04-02", "2013-10-22"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Sun (Surya)", "2013-10-22", "2013-12-22"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Moon (Chandra)", "2013-12-22", "2014-04-02"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Mars (Sevvai)", "2014-04-02", "2014-06-12"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Rahu", "2014-06-12", "2014-12-12"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Jupiter (Guru)", "2014-12-12", "2015-05-22"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Saturn (Sani)", "2015-05-22", "2015-12-02"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Mercury (Budha)", "2015-12-02", "2016-05-22"],
+  ["Venus (Sukra)", "Venus (Sukra)", "Ketu", "2016-05-22", "2016-08-02"],
+  ["Venus (Sukra)", "Sun (Surya)", "Sun (Surya)", "2016-08-02", "2016-08-20"],
+  ["Venus (Sukra)", "Sun (Surya)", "Moon (Chandra)", "2016-08-20", "2016-09-20"],
+  ["Venus (Sukra)", "Sun (Surya)", "Mars (Sevvai)", "2016-09-20", "2016-10-11"],
+  ["Venus (Sukra)", "Sun (Surya)", "Rahu", "2016-10-11", "2016-12-05"],
+  ["Venus (Sukra)", "Sun (Surya)", "Jupiter (Guru)", "2016-12-05", "2017-01-23"],
+  ["Venus (Sukra)", "Sun (Surya)", "Saturn (Sani)", "2017-01-23", "2017-03-20"],
+  ["Venus (Sukra)", "Sun (Surya)", "Mercury (Budha)", "2017-03-20", "2017-05-11"],
+  ["Venus (Sukra)", "Sun (Surya)", "Ketu", "2017-05-11", "2017-06-02"],
+  ["Venus (Sukra)", "Sun (Surya)", "Venus (Sukra)", "2017-06-02", "2017-08-02"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Moon (Chandra)", "2017-08-02", "2017-09-22"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Mars (Sevvai)", "2017-09-22", "2017-10-27"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Rahu", "2017-10-27", "2018-01-27"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Jupiter (Guru)", "2018-01-27", "2018-04-17"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Saturn (Sani)", "2018-04-17", "2018-07-22"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Mercury (Budha)", "2018-07-22", "2018-10-17"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Ketu", "2018-10-17", "2018-11-22"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Venus (Sukra)", "2018-11-22", "2019-03-02"],
+  ["Venus (Sukra)", "Moon (Chandra)", "Sun (Surya)", "2019-03-02", "2019-04-02"],
+  ["Venus (Sukra)", "Mars (Sevvai)", "Mars (Sevvai)", "2019-04-02", "2019-04-27"],
+  ["Venus (Sukra)", "Mars (Sevvai)", "Rahu", "2019-04-27", "2019-06-30"],
+  ["Venus (Sukra)", "Mars (Sevvai)", "Jupiter (Guru)", "2019-06-30", "2019-08-26"],
+  ["Venus (Sukra)", "Mars (Sevvai)", "Saturn (Sani)", "2019-08-26", "2019-11-02"],
+  ["Venus (Sukra)", "Mars (Sevvai)", "Mercury (Budha)", "2019-11-02", "2020-01-02"],
+  ["Venus (Sukra)", "Mars (Sevvai)", "Ketu", "2020-01-02", "2020-01-26"]
+];
+
+let clientRunningCounter = 1;
+
+export function normalizeDateString(inputVal: string, defaultToEndOfMonth: boolean = false): string {
+  if (!inputVal) return new Date().toISOString().slice(0, 10);
+  const s = inputVal.trim().toLowerCase();
+
+  // YYYY-MM-DD
+  const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+  }
+
+  // DD.MM.YYYY or DD/MM/YYYY
+  const dmyMatch = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+  }
+
+  // Month Name + Year (e.g. "January 1998", "jan 1998")
+  const months: Record<string, number> = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,
+    apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7,
+    aug: 8, august: 8, sep: 9, september: 9, oct: 10, october: 10,
+    nov: 11, november: 11, dec: 12, december: 12
+  };
+  const mYearMatch = s.match(/([a-z]+)\s+(\d{4})/);
+  if (mYearMatch) {
+    const mNum = months[mYearMatch[1].slice(0, 3)] || 1;
+    const yNum = parseInt(mYearMatch[2], 10);
+    const day = defaultToEndOfMonth
+      ? ([1, 3, 5, 7, 8, 10, 12].includes(mNum) ? 31 : (mNum === 2 ? 28 : 30))
+      : 1;
+    return `${yNum}-${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  if (/^\d{4}$/.test(s)) {
+    return defaultToEndOfMonth ? `${s}-12-31` : `${s}-01-01`;
+  }
+
+  return inputVal;
+}
+
+export function executeHoroscopeTimelineQuery(personId: string, startDateStr: string, endDateStr: string): HoroscopeApiResponse {
+  const normStart = normalizeDateString(startDateStr, false);
+  const normEnd = normalizeDateString(endDateStr, true);
+
+  const runningNum = clientRunningCounter;
+  clientRunningCounter = clientRunningCounter >= 100 ? 1 : clientRunningCounter + 1;
+
+  const now = new Date();
+  const timestampStr = now.toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+  const uniqueResponseId = `Q-${personId}-${String(runningNum).padStart(3, '0')}-${timestampStr}`;
+
+  // Filter overlapping periods: (start_date <= requested_end) AND (end_date >= requested_start)
+  const filtered = ALL_DASHA_TIMELINE.filter(([_, __, ___, s, e]) => s <= normEnd && e >= normStart);
+
+  const intervals: DashaIntervalItem[] = filtered.map(([md, ad, pd, s, e], idx) => {
+    let days: number | null = null;
+    try {
+      const d1 = new Date(s);
+      const d2 = new Date(e);
+      days = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+    } catch {}
+
+    return {
+      sequence_index: idx + 1,
+      mahadasha_lord_md: md,
+      antardasha_lord_ad: ad,
+      pratyantardasha_lord_pd: pd,
+      full_lord_hierarchy: `MD: ${md} > AD: ${ad} > PD: ${pd}`,
+      start_date: s,
+      end_date: e,
+      duration_days: days
+    };
+  });
+
+  let spanYears: number | null = null;
+  try {
+    const sDate = new Date(normStart);
+    const eDate = new Date(normEnd);
+    spanYears = parseFloat(((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(2));
+  } catch {}
+
+  const d1Bodies = sampleNatalPlacements.filter(p => p.chart_type === 'D1');
+  const d9Bodies = sampleNatalPlacements.filter(p => p.chart_type === 'D9');
+
+  return {
+    unique_response_id: uniqueResponseId,
+    running_number: runningNum,
+    person_id: personId,
+    requested_timeline: {
+      start_date: normStart,
+      end_date: normEnd,
+      span_years: spanYears
+    },
+    person_profile: samplePersonMaster,
+    natal_placements: {
+      D1_rashi_chart: {
+        count: d1Bodies.length,
+        lagna_sign: samplePersonMaster.birth_lagna,
+        bodies: d1Bodies
+      },
+      D9_navamsha_chart: {
+        count: d9Bodies.length,
+        bodies: d9Bodies
+      }
+    },
+    vimshottari_dasha_intervals: {
+      total_intervals_count: intervals.length,
+      granularity: "Pratyantardasha (PD) Level",
+      intervals
+    },
+    server_timestamp: now.toISOString(),
+    persisted_in_database: {
+      table: "user_queries",
+      running_number_cycle: `${runningNum}/100`,
+      status: "SAVED"
+    }
+  };
+}

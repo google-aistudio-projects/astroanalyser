@@ -28,6 +28,18 @@ import {
   NatalPlacement,
   DashaRecord
 } from './data/horoscopeData';
+import {
+  executeHoroscopeTimelineQuery,
+  HoroscopeApiResponse,
+  UserQueryLog
+} from './data/apiService';
+import RestApiStudio from './components/RestApiStudio';
+import {
+  RUN_API_SERVER_PY,
+  RUN_INGESTION_PY,
+  CONFIG_INI_TEXT,
+  SCHEMA_SQL_TEXT
+} from './data/scriptData';
 
 // Standard 12 South Indian chart cell coordinate mappings (row, col)
 // 0,0: Meenam (Pisces)   | 0,1: Mesham (Aries)   | 0,2: Rishabam (Taurus) | 0,3: Mithunam (Gemini)
@@ -62,12 +74,54 @@ const SOUTH_INDIAN_CELLS: ChartCellDef[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'charts' | 'database' | 'python' | 'sql' | 'pdf_breakdown'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'charts' | 'api' | 'database' | 'python' | 'sql' | 'pdf_breakdown'>('api');
   const [selectedChart, setSelectedChart] = useState<'D1' | 'D9'>('D1');
-  const [dbSubTab, setDbSubTab] = useState<'person_master' | 'natal_placement_detail' | 'vimshottari_dasha_detail'>('person_master');
+  const [dbSubTab, setDbSubTab] = useState<'person_master' | 'natal_placement_detail' | 'vimshottari_dasha_detail' | 'user_queries'>('person_master');
   const [dashaFilter, setDashaFilter] = useState<string>('all');
   const [searchDasha, setSearchDasha] = useState<string>('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [pythonSubTab, setPythonSubTab] = useState<'model2_api' | 'model1_ingestion' | 'config_ini' | 'schema_sql'>('model2_api');
+
+  // REST API Explorer States (Model 2)
+  const [apiPersonId, setApiPersonId] = useState<string>('001ME');
+  const [apiStartDate, setApiStartDate] = useState<string>('1998-01-01');
+  const [apiEndDate, setApiEndDate] = useState<string>('2020-01-31');
+  const [apiResponse, setApiResponse] = useState<HoroscopeApiResponse | null>(() =>
+    executeHoroscopeTimelineQuery('001ME', '1998-01-01', '2020-01-31')
+  );
+  const [apiLoading, setApiLoading] = useState<boolean>(false);
+  const [queryHistory, setQueryHistory] = useState<UserQueryLog[]>([
+    {
+      query_id: 'Q-001ME-001-20260928180000',
+      running_number: 1,
+      person_id: '001ME',
+      start_date: '1998-01-01',
+      end_date: '2020-01-31',
+      created_at: new Date().toISOString(),
+      response_payload: executeHoroscopeTimelineQuery('001ME', '1998-01-01', '2020-01-31')
+    }
+  ]);
+
+  const handleExecuteApiQuery = () => {
+    setApiLoading(true);
+    setTimeout(() => {
+      const res = executeHoroscopeTimelineQuery(apiPersonId, apiStartDate, apiEndDate);
+      setApiResponse(res);
+      setQueryHistory(prev => [
+        {
+          query_id: res.unique_response_id,
+          running_number: res.running_number,
+          person_id: res.person_id,
+          start_date: res.requested_timeline.start_date,
+          end_date: res.requested_timeline.end_date,
+          created_at: res.server_timestamp,
+          response_payload: res
+        },
+        ...prev.slice(0, 19)
+      ]);
+      setApiLoading(false);
+    }, 250);
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -210,10 +264,11 @@ def main():
         {/* Navigation Tabs */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex overflow-x-auto border-t border-slate-800/80 gap-1 pt-1">
           {[
+            { id: 'api', label: 'REST API Query (Model 2)', icon: Server },
             { id: 'overview', label: 'Horoscope Overview (001ME)', icon: BookOpen },
             { id: 'charts', label: 'D1 & D9 Visualizer', icon: Compass },
             { id: 'database', label: 'Target PostgreSQL Tables', icon: Table },
-            { id: 'python', label: 'Python Script & Pipeline', icon: Code2 },
+            { id: 'python', label: 'Python Scripts (Model 1 & 2)', icon: Code2 },
             { id: 'sql', label: 'Direct SQL Ingestion Dump', icon: Database },
             { id: 'pdf_breakdown', label: 'PDF 54-Page Architecture', icon: Layers },
           ].map(tab => {
@@ -239,6 +294,25 @@ def main():
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+        {/* TAB 0: REST API QUERY (MODEL 2) */}
+        {activeTab === 'api' && (
+          <RestApiStudio
+            apiPersonId={apiPersonId}
+            setApiPersonId={setApiPersonId}
+            apiStartDate={apiStartDate}
+            setApiStartDate={setApiStartDate}
+            apiEndDate={apiEndDate}
+            setApiEndDate={setApiEndDate}
+            apiResponse={apiResponse}
+            setApiResponse={setApiResponse}
+            queryHistory={queryHistory}
+            setQueryHistory={setQueryHistory}
+            copyToClipboard={copyToClipboard}
+            copied={copied}
+            downloadFile={downloadFile}
+          />
+        )}
+
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -672,6 +746,7 @@ def main():
                   { id: 'person_master', label: '1. person_master (1 row)' },
                   { id: 'natal_placement_detail', label: '2. natal_placement_detail (22 rows)' },
                   { id: 'vimshottari_dasha_detail', label: '3. vimshottari_dasha_detail (720 rows)' },
+                  { id: 'user_queries', label: '4. user_queries (API Transactions)' },
                 ].map(sub => (
                   <button
                     key={sub.id}
@@ -976,10 +1051,74 @@ def main():
                 </div>
               </div>
             )}
+
+            {/* Table 4: user_queries */}
+            {dbSubTab === 'user_queries' && (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Database className="w-4 h-4 text-purple-400" />
+                      TABLE: user_queries (API Query Transactions)
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Transaction audit table populated on each API call. Contains running_number (1..100), dates, and JSONB payload.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono text-purple-300 bg-purple-500/10 px-2.5 py-1 rounded border border-purple-500/20">
+                    Sequence: user_query_seq (1..100)
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-800 text-slate-300 font-mono text-[11px] uppercase">
+                      <tr>
+                        <th className="py-2.5 px-3">query_id</th>
+                        <th className="py-2.5 px-3 text-center">running_number</th>
+                        <th className="py-2.5 px-3">person_id</th>
+                        <th className="py-2.5 px-3">start_date</th>
+                        <th className="py-2.5 px-3">end_date</th>
+                        <th className="py-2.5 px-3">created_at</th>
+                        <th className="py-2.5 px-3 text-center">response_payload</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {queryHistory.map((q, idx) => (
+                        <tr key={idx} className="hover:bg-slate-800/40">
+                          <td className="py-2.5 px-3 font-mono font-bold text-amber-300">{q.query_id}</td>
+                          <td className="py-2.5 px-3 text-center font-mono">
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                              #{q.running_number}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-200">{q.person_id}</td>
+                          <td className="py-2.5 px-3 font-mono text-cyan-400">{q.start_date}</td>
+                          <td className="py-2.5 px-3 font-mono text-rose-400">{q.end_date}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px]">
+                            {q.created_at ? new Date(q.created_at).toLocaleString() : 'Just now'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              onClick={() => {
+                                copyToClipboard(JSON.stringify(q.response_payload, null, 2), `payload_${idx}`);
+                              }}
+                              className="px-2 py-1 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                            >
+                              {copied === `payload_${idx}` ? 'Copied JSONB!' : 'Copy JSONB'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 4: PYTHON SCRIPT & PIPELINE */}
+        {/* TAB 4: PYTHON SCRIPTS & PIPELINE (MODEL 1 & MODEL 2) */}
         {activeTab === 'python' && (
           <div className="space-y-6" id="python-tab">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
@@ -987,92 +1126,169 @@ def main():
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     <Terminal className="w-5 h-5 text-amber-400" />
-                    Complete, Runnable Python Script
+                    Vedic Astrology Python Scripts &amp; Architectures
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Extracts Tamil Horoscope PDF tables, grids, and text with dual Unicode &amp; Bamini encoding support, then writes directly into PostgreSQL using <code className="text-amber-400">psycopg2</code>.
+                    Select between Model 1 (PDF Ingestion Engine) and Model 2 (REST API Server), or view config.ini and schema DDL.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={() => copyToClipboard(pythonScript, 'full_python')}
+                    onClick={() => {
+                      const text =
+                        pythonSubTab === 'model2_api'
+                          ? RUN_API_SERVER_PY
+                          : pythonSubTab === 'model1_ingestion'
+                          ? RUN_INGESTION_PY
+                          : pythonSubTab === 'config_ini'
+                          ? CONFIG_INI_TEXT
+                          : SCHEMA_SQL_TEXT;
+                      copyToClipboard(text, 'active_script');
+                    }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
                   >
                     <Copy className="w-3.5 h-3.5 text-amber-400" />
-                    {copied === 'full_python' ? 'Copied!' : 'Copy Python Script'}
+                    {copied === 'active_script' ? 'Copied Script!' : 'Copy Active File'}
                   </button>
 
                   <button
-                    onClick={() => downloadFile('extract_tamil_horoscope.py', pythonScript, 'text/x-python')}
+                    onClick={() => {
+                      if (pythonSubTab === 'model2_api') {
+                        downloadFile('run_api_server.py', RUN_API_SERVER_PY, 'text/x-python');
+                      } else if (pythonSubTab === 'model1_ingestion') {
+                        downloadFile('run_ingestion.py', RUN_INGESTION_PY, 'text/x-python');
+                      } else if (pythonSubTab === 'config_ini') {
+                        downloadFile('config.ini', CONFIG_INI_TEXT, 'text/plain');
+                      } else {
+                        downloadFile('schema.sql', SCHEMA_SQL_TEXT, 'application/sql');
+                      }
+                    }}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 transition"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    Download .py Script
+                    Download File
                   </button>
                 </div>
               </div>
 
-              {/* Instructions on how to run locally */}
+              {/* Subtabs for scripts */}
+              <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+                {[
+                  { id: 'model2_api', label: '🚀 Model 2: run_api_server.py (REST API)' },
+                  { id: 'model1_ingestion', label: '📄 Model 1: run_ingestion.py (PDF Ingestion)' },
+                  { id: 'config_ini', label: '⚙️ config.ini (Shared Settings)' },
+                  { id: 'schema_sql', label: '🗄️ schema.sql (DDL & Sequence)' },
+                ].map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setPythonSubTab(sub.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      pythonSubTab === sub.id
+                        ? 'bg-amber-500 text-slate-950 shadow-md'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Quick instructions based on selected script */}
               <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
                 <div className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
                   <Server className="w-3.5 h-3.5" />
-                  Quick Setup &amp; Execution Guide (Config-Driven)
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
-                  <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                    <div className="font-bold text-slate-200 mb-1">1. Install Dependencies</div>
-                    <code className="text-[11px] text-amber-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto">
-                      pip install pdfplumber psycopg2-binary
-                    </code>
-                  </div>
-                  <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                    <div className="font-bold text-slate-200 mb-1">2. Edit config.ini</div>
-                    <code className="text-[11px] text-amber-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto">
-                      Set host, dbname, user, password in config.ini
-                    </code>
-                  </div>
-                  <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                    <div className="font-bold text-slate-200 mb-1">3. Just Run The Script!</div>
-                    <code className="text-[11px] text-emerald-400 bg-slate-950 px-2 py-1 rounded block overflow-x-auto font-bold">
-                      python3 run_ingestion.py
-                    </code>
-                  </div>
+                  {pythonSubTab === 'model2_api'
+                    ? 'Model 2 REST API Execution Guide'
+                    : pythonSubTab === 'model1_ingestion'
+                    ? 'Model 1 PDF Ingestion Execution Guide'
+                    : pythonSubTab === 'config_ini'
+                    ? 'Central Configuration Guide'
+                    : 'Target Database DDL Schema'}
                 </div>
 
-                <div className="mt-2 pt-2 border-t border-slate-800/80">
-                  <div className="text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                    <span>📄 Configuration File: <code className="text-amber-400">config.ini</code></span>
-                    <span className="text-[10px] text-slate-400">Zero command-line flags needed</span>
+                {pythonSubTab === 'model2_api' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">1. Run Server</div>
+                      <code className="text-[11px] text-amber-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto font-mono">
+                        python run_api_server.py
+                      </code>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">2. Endpoint</div>
+                      <code className="text-[11px] text-cyan-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto font-mono">
+                        POST :5000/api/horoscope/query
+                      </code>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">3. Automated Persistence</div>
+                      <span className="text-[11px] text-emerald-400">
+                        Inserts into user_queries with cycling 1..100 sequence!
+                      </span>
+                    </div>
                   </div>
-                  <pre className="bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
-{`[database]
-host = localhost
-port = 5432
-dbname = vedic_astro
-user = postgres
-password = postgres
+                )}
 
-[pdf]
-pdf_path = horoscope.pdf
+                {pythonSubTab === 'model1_ingestion' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">1. Place PDF</div>
+                      <code className="text-[11px] text-amber-300 bg-slate-950 px-2 py-1 rounded block overflow-x-auto font-mono">
+                        horoscope.pdf
+                      </code>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">2. Run Ingestion</div>
+                      <code className="text-[11px] text-emerald-400 bg-slate-950 px-2 py-1 rounded block overflow-x-auto font-mono font-bold">
+                        python run_ingestion.py
+                      </code>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">3. Ingests 3 Tables</div>
+                      <span className="text-[11px] text-slate-300">
+                        person_master, natal_placement_detail, vimshottari_dasha_detail
+                      </span>
+                    </div>
+                  </div>
+                )}
 
-[options]
-dry_run = false
-export_sql = scripts/insert_001ME.sql
-export_json = scripts/extracted_001ME.json`}
-                  </pre>
-                </div>
+                {pythonSubTab === 'config_ini' && (
+                  <p className="text-xs text-slate-300">
+                    Both Model 1 and Model 2 read from this file. Adjust database credentials or API host/port here.
+                  </p>
+                )}
+
+                {pythonSubTab === 'schema_sql' && (
+                  <p className="text-xs text-slate-300">
+                    DDL definitions for all 4 tables (including <code className="text-purple-400">user_queries</code>) and the cycling <code className="text-amber-400">user_query_seq</code> (1..100) sequence.
+                  </p>
+                )}
               </div>
 
               {/* Code viewer */}
               <div className="relative">
                 <div className="absolute top-3 right-3 z-10">
                   <span className="text-[10px] font-mono bg-slate-800/90 text-slate-400 px-2 py-1 rounded border border-slate-700">
-                    Python 3.9+ &bull; pdfplumber &bull; psycopg2
+                    {pythonSubTab === 'model2_api'
+                      ? 'run_api_server.py (HTTP + PostgreSQL)'
+                      : pythonSubTab === 'model1_ingestion'
+                      ? 'run_ingestion.py (CLI Runner)'
+                      : pythonSubTab === 'config_ini'
+                      ? 'config.ini (ConfigParser)'
+                      : 'schema.sql (PostgreSQL DDL)'}
                   </span>
                 </div>
                 <pre className="bg-slate-950 text-slate-200 p-5 rounded-xl border border-slate-800 text-xs font-mono overflow-x-auto max-h-[500px] leading-relaxed">
-                  <code>{pythonScript}</code>
+                  <code>
+                    {pythonSubTab === 'model2_api'
+                      ? RUN_API_SERVER_PY
+                      : pythonSubTab === 'model1_ingestion'
+                      ? RUN_INGESTION_PY
+                      : pythonSubTab === 'config_ini'
+                      ? CONFIG_INI_TEXT
+                      : SCHEMA_SQL_TEXT}
+                  </code>
                 </pre>
               </div>
             </div>

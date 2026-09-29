@@ -51,3 +51,28 @@ CREATE INDEX IF NOT EXISTS idx_natal_person_chart ON natal_placement_detail(pers
 CREATE INDEX IF NOT EXISTS idx_natal_house ON natal_placement_detail(person_id, chart_type, house_number);
 CREATE INDEX IF NOT EXISTS idx_dasha_person_dates ON vimshottari_dasha_detail(person_id, start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_dasha_lords ON vimshottari_dasha_detail(person_id, mahadasha_lord, antardasha_lord);
+
+-- ===============================================================================
+-- D. TABLE: user_queries (Transaction audit table with 1 to 100 cycling sequence)
+-- ===============================================================================
+CREATE SEQUENCE IF NOT EXISTS user_query_seq
+    MINVALUE 1
+    MAXVALUE 100
+    START WITH 1
+    INCREMENT BY 1
+    CYCLE;
+
+CREATE TABLE IF NOT EXISTS user_queries (
+    id SERIAL PRIMARY KEY,
+    query_id VARCHAR(50) UNIQUE NOT NULL,      -- e.g., 'Q-001ME-042-20260928181500'
+    running_number INTEGER NOT NULL,           -- Cycling unique number 1 to 100
+    person_id VARCHAR(50) NOT NULL REFERENCES person_master(person_id) ON DELETE CASCADE,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    response_payload JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_queries_person ON user_queries(person_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_queries_running ON user_queries(running_number);
+
