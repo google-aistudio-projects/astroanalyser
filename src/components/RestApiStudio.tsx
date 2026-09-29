@@ -54,6 +54,77 @@ interface RestApiStudioProps {
   downloadFile: (filename: string, content: string, type: string) => void;
 }
 
+// 27 Nakshatra Planetary Lord Mapping (UI-only 3-letter abbreviation: Sat, Jup, Mar, etc.)
+export function getStarLordShort(starName?: string): string {
+  if (!starName) return '';
+  const s = starName.toLowerCase().trim();
+
+  // Ketu (Ket): Ashwini, Magha, Mula
+  if (s.includes('ashwini') || s.includes('asvini') || s.includes('aswini') || 
+      s.includes('magha') || s.includes('makam') || s.includes('magam') || 
+      s.includes('mula') || s.includes('moolam') || s.includes('moola')) {
+    return 'Ket';
+  }
+
+  // Venus (Ven): Bharani, Purva Phalguni, Purva Ashadha
+  if (s.includes('bharani') || s.includes('parani') || 
+      s.includes('purva phalguni') || s.includes('pooram') || s.includes('pubba') || 
+      s.includes('purva ashadha') || s.includes('pooradam') || s.includes('purvashada')) {
+    return 'Ven';
+  }
+
+  // Sun (Sun): Krittika, Uttara Phalguni, Uttara Ashadha
+  if (s.includes('krittika') || s.includes('krithika') || s.includes('karthigai') || 
+      s.includes('uttara phalguni') || s.includes('uthiram') || s.includes('uttaraphalguni') || 
+      s.includes('uttara ashadha') || s.includes('uthiradam') || s.includes('uttarashada')) {
+    return 'Sun';
+  }
+
+  // Moon (Moo): Rohini, Hasta, Shravana
+  if (s.includes('rohini') || s.includes('rohithi') || 
+      s.includes('hasta') || s.includes('hastham') || 
+      s.includes('shravana') || s.includes('thiruvonam') || s.includes('sravana')) {
+    return 'Moo';
+  }
+
+  // Mars (Mar): Mrigashira, Chitra, Dhanishta
+  if (s.includes('mrigashira') || s.includes('mrigashirsham') || s.includes('mirugaseeridam') || 
+      s.includes('chitra') || s.includes('chithirai') || 
+      s.includes('dhanishta') || s.includes('avittam')) {
+    return 'Mar';
+  }
+
+  // Rahu (Rah): Ardra, Swati, Shatabhisha
+  if (s.includes('ardra') || s.includes('thiruvathirai') || s.includes('arudra') || 
+      s.includes('swati') || s.includes('swathi') || 
+      s.includes('shatabhisha') || s.includes('sadayam') || s.includes('satabhisha')) {
+    return 'Rah';
+  }
+
+  // Jupiter (Jup): Punarvasu, Vishakha, Purva Bhadrapada
+  if (s.includes('punarvasu') || s.includes('punarpoosam') || 
+      s.includes('vishakha') || s.includes('visakam') || 
+      s.includes('purva bhadra') || s.includes('poorattathi') || s.includes('poorvabhadra')) {
+    return 'Jup';
+  }
+
+  // Saturn (Sat): Pushya, Anuradha, Uttara Bhadrapada
+  if (s.includes('pushya') || s.includes('poosam') || s.includes('pushyami') || 
+      s.includes('anuradha') || s.includes('anusham') || 
+      s.includes('uttara bhadra') || s.includes('uthirattathi') || s.includes('uttarabhadra')) {
+    return 'Sat';
+  }
+
+  // Mercury (Mer): Ashlesha, Jyeshtha, Revati
+  if (s.includes('ashlesha') || s.includes('ayilyam') || s.includes('aslesha') || 
+      s.includes('jyeshtha') || s.includes('kettai') || s.includes('jyeshta') || 
+      s.includes('revati') || s.includes('revathi')) {
+    return 'Mer';
+  }
+
+  return '';
+}
+
 export default function RestApiStudio({
   apiPersonId,
   setApiPersonId,
@@ -845,7 +916,20 @@ print(prompt_markdown[:400])
                           <td className="py-2 px-3 text-center font-bold text-amber-400 bg-amber-500/5">
                             House {p.house_number}
                           </td>
-                          <td className="py-2 px-3 text-slate-400">{p.nakshatra_name || '-'}</td>
+                          <td className="py-2 px-3 text-slate-300">
+                            {p.nakshatra_name ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span>{p.nakshatra_name}</span>
+                                {getStarLordShort(p.nakshatra_name) && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                    ({getStarLordShort(p.nakshatra_name)})
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
                           <td className="py-2 px-3 text-center text-slate-400">{p.pada ?? '-'}</td>
                           <td className="py-2 px-3 font-mono text-cyan-400">{p.degree_sputa || '-'}</td>
                           <td className="py-2 px-3 text-center">
@@ -1108,8 +1192,12 @@ print(prompt_markdown[:400])
                                   <div className="text-[10px] text-cyan-400 font-semibold mt-0.5">
                                     House {ev.house_from_natal_lagna} (Lagna) &bull; House {ev.house_from_natal_rashi} (Moon)
                                   </div>
-                                  <div className="text-[9px] text-slate-500 mt-0.5 font-mono">
-                                    {ev.nakshatra_name} (P{ev.pada})
+                                  <div className="text-[9px] text-slate-400 mt-0.5 font-mono flex items-center justify-center gap-1 flex-wrap">
+                                    <span>{ev.nakshatra_name}</span>
+                                    {getStarLordShort(ev.nakshatra_name) && (
+                                      <span className="text-amber-400 font-bold">({getStarLordShort(ev.nakshatra_name)})</span>
+                                    )}
+                                    <span className="text-slate-500">P{ev.pada}</span>
                                   </div>
                                 </div>
                                 {i < arr.length - 1 && (
@@ -1210,8 +1298,15 @@ print(prompt_markdown[:400])
                             {g.degree_sputa}
                           </td>
                           <td className="py-2.5 px-3 text-slate-300">
-                            <span className="font-semibold text-slate-200">{g.graha_pada_chara.nakshatra_name}</span>
-                            <span className="text-amber-400 ml-1">Pada {g.graha_pada_chara.pada}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-slate-200">{g.graha_pada_chara.nakshatra_name}</span>
+                              {getStarLordShort(g.graha_pada_chara.nakshatra_name) && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                  ({getStarLordShort(g.graha_pada_chara.nakshatra_name)})
+                                </span>
+                              )}
+                              <span className="text-amber-400/90 text-[11px] font-mono">Pada {g.graha_pada_chara.pada}</span>
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 text-center bg-cyan-950/10">
                             <span className="font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
@@ -1314,7 +1409,17 @@ print(prompt_markdown[:400])
                                 </span>
                               </td>
                               <td className="py-2 px-3 text-slate-300">
-                                {ev.nakshatra_name} (Pada {ev.pada})
+                                <div className="font-semibold text-slate-200 flex items-center gap-1.5 flex-wrap">
+                                  <span>{ev.nakshatra_name}</span>
+                                  {getStarLordShort(ev.nakshatra_name) && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                      ({getStarLordShort(ev.nakshatra_name)})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                  Pada {ev.pada}
+                                </div>
                               </td>
                               <td className="py-2 px-3 text-slate-400 text-[11px] font-mono">
                                 {ev.summary_text}
@@ -1400,7 +1505,15 @@ print(prompt_markdown[:400])
                                   <span className="block text-[10px] text-slate-400 mt-0.5">{ev.house_from_natal_rashi_title}</span>
                                 </td>
                                 <td className="py-2.5 px-3 text-slate-300">
-                                  {ev.nakshatra_name} (P{ev.pada})
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-slate-200">{ev.nakshatra_name}</span>
+                                    {getStarLordShort(ev.nakshatra_name) && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                        ({getStarLordShort(ev.nakshatra_name)})
+                                      </span>
+                                    )}
+                                    <span className="text-slate-400 text-[11px] font-mono">(P{ev.pada})</span>
+                                  </div>
                                 </td>
                                 <td className="py-2.5 px-3 text-center">
                                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">

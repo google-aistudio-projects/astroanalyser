@@ -33,7 +33,7 @@ import {
   HoroscopeApiResponse,
   UserQueryLog
 } from './data/apiService';
-import RestApiStudio from './components/RestApiStudio';
+import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
 import {
   RUN_API_SERVER_PY,
   RUN_INGESTION_PY,
@@ -694,8 +694,20 @@ def main():
                             </td>
                             {selectedChart === 'D1' && (
                               <>
-                                <td className="py-2 px-3 text-slate-400">
-                                  {p.nakshatra_name || '-'} {p.pada ? `(P${p.pada})` : ''}
+                                <td className="py-2 px-3 text-slate-300">
+                                  {p.nakshatra_name ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span>{p.nakshatra_name}</span>
+                                      {getStarLordShort(p.nakshatra_name) && (
+                                        <span className="px-1 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                          ({getStarLordShort(p.nakshatra_name)})
+                                        </span>
+                                      )}
+                                      {p.pada && <span className="text-slate-400 text-xs font-mono">P{p.pada}</span>}
+                                    </div>
+                                  ) : (
+                                    '-'
+                                  )}
                                 </td>
                                 <td className="py-2 px-3 font-mono text-cyan-400">
                                   {p.degree_sputa || '-'}
@@ -937,7 +949,20 @@ def main():
                             <td className="py-2 px-3 text-center font-bold text-amber-400 bg-amber-500/5">
                               {p.house_number}
                             </td>
-                            <td className="py-2 px-3 text-slate-400">{p.nakshatra_name || '-'}</td>
+                            <td className="py-2 px-3 text-slate-300">
+                              {p.nakshatra_name ? (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{p.nakshatra_name}</span>
+                                  {getStarLordShort(p.nakshatra_name) && (
+                                    <span className="px-1 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                      ({getStarLordShort(p.nakshatra_name)})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
                             <td className="py-2 px-3 text-center text-slate-400">{p.pada ?? '-'}</td>
                             <td className="py-2 px-3 font-mono text-cyan-400">{p.degree_sputa || '-'}</td>
                             <td className="py-2 px-3 text-center">
