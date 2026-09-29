@@ -73,7 +73,7 @@ export default function RestApiStudio({
   const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'natal' | 'transit' | 'markdown' | 'json' | 'clients' | 'audit'>('transit');
   const [dashaSearch, setDashaSearch] = useState('');
   const [selectedChartType, setSelectedChartType] = useState<'D1' | 'D9'>('D1');
-  const [transitViewMode, setTransitViewMode] = useState<'snapshot_start' | 'snapshot_end' | 'timeline_events'>('snapshot_start');
+  const [transitViewMode, setTransitViewMode] = useState<'timeline_events' | 'saturn_tracker' | 'snapshot_start' | 'snapshot_end'>('timeline_events');
   const [transitSearch, setTransitSearch] = useState('');
   const [markdownView, setMarkdownView] = useState<'preview' | 'raw'>('preview');
   const [apiBaseUrl, setApiBaseUrl] = useState('http://localhost:5000');
@@ -880,23 +880,7 @@ print(prompt_markdown[:400])
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-                    <button
-                      onClick={() => setTransitViewMode('snapshot_start')}
-                      className={`px-3 py-1 rounded font-semibold transition ${
-                        transitViewMode === 'snapshot_start' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Start Snapshot ({apiResponse.requested_timeline.start_date})
-                    </button>
-                    <button
-                      onClick={() => setTransitViewMode('snapshot_end')}
-                      className={`px-3 py-1 rounded font-semibold transition ${
-                        transitViewMode === 'snapshot_end' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      End Snapshot ({apiResponse.requested_timeline.end_date})
-                    </button>
+                  <div className="flex flex-wrap items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
                     <button
                       onClick={() => setTransitViewMode('timeline_events')}
                       className={`px-3 py-1 rounded font-semibold transition ${
@@ -905,6 +889,52 @@ print(prompt_markdown[:400])
                     >
                       Sign Ingress Events ({apiResponse.transit_ephemeris_timeline.major_transits_timeline_count})
                     </button>
+                    <button
+                      onClick={() => setTransitViewMode('saturn_tracker')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        transitViewMode === 'saturn_tracker' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-amber-400 hover:text-white'
+                      }`}
+                    >
+                      🪐 Saturn (Sani) Tracker (~2.5 yrs/sign)
+                    </button>
+                    <button
+                      onClick={() => setTransitViewMode('snapshot_start')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        transitViewMode === 'snapshot_start' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Start Snapshot ({apiResponse.requested_timeline.start_date})
+                    </button>
+                    <button
+                      onClick={() => setTransitViewMode('snapshot_end')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        transitViewMode === 'snapshot_end' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      End Snapshot ({apiResponse.requested_timeline.end_date})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vedic Astrological Disambiguation Notice */}
+              <div className="bg-slate-950/80 p-4 rounded-xl border border-indigo-500/30 space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-amber-400 font-bold">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Important Vedic Astrological Distinction: Natal Chart vs Dasha vs Transit</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-300">
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <strong className="text-cyan-400 block mb-1">1. Natal Birth Chart (D1)</strong>
+                    Static snapshot at birth moment (Jan 26, 1976). Saturn is frozen in <strong>Katakam (House 8)</strong> forever in this native's D1 chart.
+                  </div>
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <strong className="text-purple-400 block mb-1">2. Vimshottari Dasha Periods</strong>
+                    Mathematical directional time-lords. Native was born with <strong>13y 2m 5d</strong> balance of Saturn Mahadasha (1976-1989). That is a time ruler, NOT a physical transit.
+                  </div>
+                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                    <strong className="text-emerald-400 block mb-1">3. Gochara (Transit Ephemeris)</strong>
+                    Real physical motion of the planets. Saturn completes the 12 signs in <strong>29.45 years (~2.46 years or 30 months per sign)</strong>.
                   </div>
                 </div>
               </div>
@@ -935,9 +965,101 @@ print(prompt_markdown[:400])
                 </div>
               </div>
 
+              {/* Visual Breadcrumb of Saturn's Systematic Progression */}
+              {(() => {
+                const saturnIngresses = apiResponse.transit_ephemeris_timeline.major_transits_timeline
+                  .filter(ev => ev.graha_name.includes('Saturn') || ev.graha_name.includes('சனி'));
+
+                return (
+                  <div className="space-y-2">
+                    <div className="bg-slate-950 p-3 rounded-xl border border-amber-500/20 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between text-xs gap-2">
+                        <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                          <span>🪐</span> Saturn (Sani) Path in this Query ({apiResponse.requested_timeline.start_date} → {apiResponse.requested_timeline.end_date}):
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {saturnIngresses.length} Sign Phase{saturnIngresses.length > 1 ? 's' : ''} Found
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                        {saturnIngresses.map((ev, i, arr) => (
+                          <React.Fragment key={i}>
+                            <div
+                              className="flex-shrink-0 bg-slate-900 border border-slate-700/80 hover:border-amber-400 px-3 py-2 rounded-lg text-center cursor-pointer transition shadow-sm"
+                              onClick={() => setTransitViewMode('saturn_tracker')}
+                              title={`${ev.transit_rashi_name}: ${ev.start_date} to ${ev.end_date}`}
+                            >
+                              <div className="font-bold text-amber-300 text-xs">{ev.transit_rashi_name}</div>
+                              <div className="text-[11px] text-slate-300 font-mono mt-0.5">
+                                {ev.start_date} → {ev.end_date}
+                              </div>
+                              <div className="text-[10px] text-cyan-400 font-semibold mt-0.5">
+                                House {ev.house_from_natal_lagna} (Lagna) &bull; House {ev.house_from_natal_rashi} (Moon)
+                              </div>
+                            </div>
+                            {i < arr.length - 1 && (
+                              <ArrowRight className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+
+                    {saturnIngresses.length > 1 && (
+                      <div className="bg-emerald-950/20 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-200 flex items-start gap-2.5">
+                        <Sparkles className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="text-white block mb-0.5">
+                            Saturn Moves Out of {saturnIngresses[0].transit_rashi_name} During This Query Window!
+                          </strong>
+                          <span>
+                            Saturn was in <strong>{saturnIngresses[0].transit_rashi_name}</strong> from {saturnIngresses[0].start_date} until {saturnIngresses[0].end_date}, then entered <strong>{saturnIngresses[1].transit_rashi_name}</strong> on {saturnIngresses[1].start_date}!
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* 9 Graha Snapshot Table */}
               {(transitViewMode === 'snapshot_start' || transitViewMode === 'snapshot_end') && (
-                <div className="overflow-x-auto">
+                <div className="space-y-3">
+                  <div className="bg-amber-950/20 border border-amber-500/30 p-3 rounded-lg text-[11px] text-amber-200 flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-white block mb-0.5">
+                        Single-Day Snapshot ({transitViewMode === 'snapshot_start' ? apiResponse.requested_timeline.start_date : apiResponse.requested_timeline.end_date})
+                      </strong>
+                      <span>
+                        This table shows where the 9 Grahas were on <em>this exact single day</em>. On this start date, Saturn happened to be in{' '}
+                        <strong className="text-amber-300">
+                          {transitViewMode === 'snapshot_start'
+                            ? apiResponse.transit_ephemeris_timeline.transit_snapshot_start.find(g => g.graha_key === 'Saturn')?.transit_rashi_name
+                            : apiResponse.transit_ephemeris_timeline.transit_snapshot_end.find(g => g.graha_key === 'Saturn')?.transit_rashi_name}
+                        </strong>
+                        . It did <strong>NOT</strong> stay there for years! To see all dates when Saturn changed signs, switch to{' '}
+                        <button
+                          type="button"
+                          onClick={() => setTransitViewMode('saturn_tracker')}
+                          className="underline text-cyan-300 font-bold hover:text-white"
+                        >
+                          Saturn Tracker
+                        </button>{' '}
+                        or{' '}
+                        <button
+                          type="button"
+                          onClick={() => setTransitViewMode('timeline_events')}
+                          className="underline text-emerald-300 font-bold hover:text-white"
+                        >
+                          Sign Ingress Events
+                        </button>
+                        .
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-800 text-slate-300 font-mono text-[11px] uppercase">
                       <tr>
@@ -1005,9 +1127,10 @@ print(prompt_markdown[:400])
                     </tbody>
                   </table>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Major Sign Ingress Events Timeline */}
+            {/* Major Sign Ingress Events Timeline */}
               {transitViewMode === 'timeline_events' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1073,6 +1196,95 @@ print(prompt_markdown[:400])
                               </td>
                             </tr>
                           ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Saturn Dedicated Sani Peyarchi Tracker */}
+              {transitViewMode === 'saturn_tracker' && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-indigo-500/10 border border-amber-500/30 rounded-xl p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>🪐</span>
+                          Saturn (Sani Bhagavan) Orbit &amp; Transit Engine Verification
+                        </h5>
+                        <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+                          Astronomical Orbital Period: <strong>29.457 Julian Years</strong> for 360° zodiac = <strong>~2.46 years (around 30 months)</strong> per sign.
+                          Below is the exact chronological sequence of every Saturn sign ingress across your selected timeline ({apiResponse.requested_timeline.start_date} to {apiResponse.requested_timeline.end_date}). Notice that Saturn systematically advances to the next sign every 2 to 2.8 years!
+                        </p>
+                      </div>
+                      <div className="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-mono text-amber-400">
+                        Rate: ~12.2° per year (~2.5 yrs / 30°)
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-800 text-slate-300 font-mono text-[11px] uppercase">
+                        <tr>
+                          <th className="py-2.5 px-3">#</th>
+                          <th className="py-2.5 px-3">Transit Sign</th>
+                          <th className="py-2.5 px-3">Start Date</th>
+                          <th className="py-2.5 px-3">End Date</th>
+                          <th className="py-2.5 px-3 text-center">Duration</th>
+                          <th className="py-2.5 px-3 text-center bg-cyan-950/20 text-cyan-300">House from Lagna</th>
+                          <th className="py-2.5 px-3 text-center bg-rose-950/20 text-rose-300">House from Moon</th>
+                          <th className="py-2.5 px-3">Star &amp; Pada</th>
+                          <th className="py-2.5 px-3 text-center">Stay Length</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 text-slate-300">
+                        {apiResponse.transit_ephemeris_timeline.major_transits_timeline
+                          .filter(ev => ev.graha_name.includes('Saturn') || ev.graha_name.includes('சனி'))
+                          .map((ev, idx) => {
+                            let durStr = '-';
+                            try {
+                              const d1 = new Date(ev.start_date);
+                              const d2 = new Date(ev.end_date);
+                              const days = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+                              const yrs = (days / 365.25).toFixed(1);
+                              durStr = `${days} days (~${yrs} yrs)`;
+                            } catch {}
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-800/40">
+                                <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
+                                <td className="py-2.5 px-3 font-bold text-amber-300">
+                                  {ev.transit_rashi_name} <span className="text-[10px] text-slate-400 font-normal">({ev.transit_rashi_tamil})</span>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-cyan-400">{ev.start_date}</td>
+                                <td className="py-2.5 px-3 font-mono text-rose-400">{ev.end_date}</td>
+                                <td className="py-2.5 px-3 text-center font-mono font-semibold text-emerald-400 bg-emerald-500/5">
+                                  {durStr}
+                                </td>
+                                <td className="py-2.5 px-3 text-center bg-cyan-950/10">
+                                  <span className="font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded text-[11px]">
+                                    House {ev.house_from_natal_lagna}
+                                  </span>
+                                  <span className="block text-[10px] text-slate-400 mt-0.5">{ev.house_from_natal_lagna_title}</span>
+                                </td>
+                                <td className="py-2.5 px-3 text-center bg-rose-950/10">
+                                  <span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded text-[11px]">
+                                    House {ev.house_from_natal_rashi}
+                                  </span>
+                                  <span className="block text-[10px] text-slate-400 mt-0.5">{ev.house_from_natal_rashi_title}</span>
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-300">
+                                  {ev.nakshatra_name} (P{ev.pada})
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                    ~2.5 YRS / SIGN
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>

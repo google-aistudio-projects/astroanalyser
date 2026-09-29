@@ -1,8 +1,58 @@
 """
 Fallback data provider for Horoscope 001ME when PostgreSQL is offline or running standalone.
 """
-import sys, os
+import sys, os, re
 from datetime import datetime, date
+
+MONTHS_MAP = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+}
+
+def normalize_date(input_val: str, default_to_end_of_month: bool = False) -> str:
+    if not input_val:
+        return datetime.now().strftime("%Y-%m-%d")
+    s = str(input_val).strip().lower()
+    iso_match = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', s)
+    if iso_match:
+        y, m, d = map(int, iso_match.groups())
+        return f"{y:04d}-{m:02d}-{d:02d}"
+    dmy_match = re.match(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$', s)
+    if dmy_match:
+        d, m, y = map(int, dmy_match.groups())
+        return f"{y:04d}-{m:02d}-{d:02d}"
+    ym_match = re.match(r'^(\d{4})[./-](\d{1,2})$', s)
+    if ym_match:
+        y_num = int(ym_match.group(1))
+        m_num = max(1, min(12, int(ym_match.group(2))))
+        if default_to_end_of_month:
+            day = 31 if m_num in [1, 3, 5, 7, 8, 10, 12] else (29 if m_num == 2 and (y_num % 4 == 0 and (y_num % 100 != 0 or y_num % 400 == 0)) else (28 if m_num == 2 else 30))
+        else:
+            day = 1
+        return f"{y_num:04d}-{m_num:02d}-{day:02d}"
+    my_match = re.match(r'^(\d{1,2})[./-](\d{4})$', s)
+    if my_match:
+        m_num = max(1, min(12, int(my_match.group(1))))
+        y_num = int(my_match.group(2))
+        if default_to_end_of_month:
+            day = 31 if m_num in [1, 3, 5, 7, 8, 10, 12] else (29 if m_num == 2 and (y_num % 4 == 0 and (y_num % 100 != 0 or y_num % 400 == 0)) else (28 if m_num == 2 else 30))
+        else:
+            day = 1
+        return f"{y_num:04d}-{m_num:02d}-{day:02d}"
+    m_year_match = re.search(r'([a-z]+)\s+(\d{4})', s)
+    if m_year_match:
+        m_str, y_str = m_year_match.groups()
+        m_num = MONTHS_MAP.get(m_str[:3], 1)
+        y_num = int(y_str)
+        if default_to_end_of_month:
+            day = 31 if m_num in [1, 3, 5, 7, 8, 10, 12] else (29 if m_num == 2 and (y_num % 4 == 0 and (y_num % 100 != 0 or y_num % 400 == 0)) else (28 if m_num == 2 else 30))
+        else:
+            day = 1
+        return f"{y_num:04d}-{m_num:02d}-{day:02d}"
+    if re.match(r'^\d{4}$', s):
+        y = int(s)
+        return f"{y:04d}-12-31" if default_to_end_of_month else f"{y:04d}-01-01"
+    return s
 
 # Ensure scripts folder is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
@@ -25,6 +75,9 @@ def get_fallback_data(person_id: str, start_date: str, end_date: str):
     running_num = get_next_fallback_counter()
     timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
     unique_response_id = f"Q-{person_id}-{running_num:03d}-{timestamp_str}"
+
+    norm_start = normalize_date(start_date, default_to_end_of_month=False)
+    norm_end = normalize_date(end_date, default_to_end_of_month=True)
 
     person_profile = {
         "person_id": "001ME",
@@ -317,8 +370,8 @@ def get_fallback_data(person_id: str, start_date: str, end_date: str):
             seq += 1
 
     try:
-        dt_start = datetime.strptime(start_date, "%Y-%m-%d")
-        dt_end = datetime.strptime(end_date, "%Y-%m-%d")
+        dt_start = datetime.strptime(norm_start, "%Y-%m-%d")
+        dt_end = datetime.strptime(norm_end, "%Y-%m-%d")
         span_years = round((dt_end - dt_start).days / 365.25, 2)
     except Exception:
         dt_start = datetime.now()
@@ -340,8 +393,8 @@ def get_fallback_data(person_id: str, start_date: str, end_date: str):
         "running_number": running_num,
         "person_id": person_id,
         "requested_timeline": {
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": norm_start,
+            "end_date": norm_end,
             "span_years": span_years
         },
         "person_profile": person_profile,

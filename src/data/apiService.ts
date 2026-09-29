@@ -301,6 +301,30 @@ export function normalizeDateString(inputVal: string, defaultToEndOfMonth: boole
     return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
   }
 
+  // YYYY-MM, YYYY/MM, YYYY.MM (e.g. "2028-01", "2028-04", "2028/1", "2028-6")
+  const ymMatch = s.match(/^(\d{4})[./-](\d{1,2})$/);
+  if (ymMatch) {
+    const yNum = parseInt(ymMatch[1], 10);
+    const mNum = Math.max(1, Math.min(12, parseInt(ymMatch[2], 10)));
+    let day = 1;
+    if (defaultToEndOfMonth) {
+      day = [1, 3, 5, 7, 8, 10, 12].includes(mNum) ? 31 : (mNum === 2 ? (yNum % 4 === 0 ? 29 : 28) : 30);
+    }
+    return `${yNum}-${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  // MM/YYYY, MM-YYYY, MM.YYYY (e.g. "01/2028", "04-2028", "4/2028")
+  const myMatch = s.match(/^(\d{1,2})[./-](\d{4})$/);
+  if (myMatch) {
+    const mNum = Math.max(1, Math.min(12, parseInt(myMatch[1], 10)));
+    const yNum = parseInt(myMatch[2], 10);
+    let day = 1;
+    if (defaultToEndOfMonth) {
+      day = [1, 3, 5, 7, 8, 10, 12].includes(mNum) ? 31 : (mNum === 2 ? (yNum % 4 === 0 ? 29 : 28) : 30);
+    }
+    return `${yNum}-${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
   // Month Name + Year (e.g. "January 1998", "jan 1998")
   const months: Record<string, number> = {
     jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,

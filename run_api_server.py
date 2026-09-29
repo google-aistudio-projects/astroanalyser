@@ -184,6 +184,38 @@ def normalize_date(input_val: str, default_to_end_of_month: bool = False) -> str
         d, m, y = map(int, dmy_match.groups())
         return f"{y:04d}-{m:02d}-{d:02d}"
 
+    # Match YYYY-MM, YYYY/MM, YYYY.MM (e.g. "2028-01", "2028-04", "2028/1", "2028-6")
+    ym_match = re.match(r'^(\d{4})[./-](\d{1,2})$', s)
+    if ym_match:
+        y_num = int(ym_match.group(1))
+        m_num = max(1, min(12, int(ym_match.group(2))))
+        if default_to_end_of_month:
+            if m_num in [1, 3, 5, 7, 8, 10, 12]:
+                day = 31
+            elif m_num == 2:
+                day = 29 if (y_num % 4 == 0 and (y_num % 100 != 0 or y_num % 400 == 0)) else 28
+            else:
+                day = 30
+        else:
+            day = 1
+        return f"{y_num:04d}-{m_num:02d}-{day:02d}"
+
+    # Match MM/YYYY, MM-YYYY, MM.YYYY (e.g. "01/2028", "04-2028", "4/2028")
+    my_match = re.match(r'^(\d{1,2})[./-](\d{4})$', s)
+    if my_match:
+        m_num = max(1, min(12, int(my_match.group(1))))
+        y_num = int(my_match.group(2))
+        if default_to_end_of_month:
+            if m_num in [1, 3, 5, 7, 8, 10, 12]:
+                day = 31
+            elif m_num == 2:
+                day = 29 if (y_num % 4 == 0 and (y_num % 100 != 0 or y_num % 400 == 0)) else 28
+            else:
+                day = 30
+        else:
+            day = 1
+        return f"{y_num:04d}-{m_num:02d}-{day:02d}"
+
     # Match Month Name + Year (e.g. "January 1998", "jan 1998")
     m_year_match = re.search(r'([a-z]+)\s+(\d{4})', s)
     if m_year_match:
