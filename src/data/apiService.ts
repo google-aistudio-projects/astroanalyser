@@ -1,4 +1,5 @@
 import { samplePersonMaster, sampleNatalPlacements, PersonMaster, NatalPlacement } from './horoscopeData';
+import { generateClientTransitTimeline, TransitEphemerisPayload } from './transitEphemeris';
 
 export interface UserQueryLog {
   id?: number;
@@ -48,6 +49,7 @@ export interface HoroscopeApiResponse {
     granularity: string;
     intervals: DashaIntervalItem[];
   };
+  transit_ephemeris_timeline: TransitEphemerisPayload;
   server_timestamp: string;
   persisted_in_database: {
     table: string;
@@ -393,6 +395,7 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
       granularity: "Pratyantardasha (PD) Level",
       intervals
     },
+    transit_ephemeris_timeline: generateClientTransitTimeline(normStart, normEnd, 9, 8),
     server_timestamp: now.toISOString(),
     persisted_in_database: {
       table: "user_queries",

@@ -63,12 +63,22 @@ from typing import Dict, Any, List, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 
+# Ensure scripts directory is in path for modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
+
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
+
+try:
+    from vedic_ephemeris import generate_transit_timeline, get_all_grahas_transit_snapshot, parse_sign_to_index
+    HAS_EPHEMERIS = True
+except Exception as e:
+    print(f"Notice: vedic_ephemeris import warning: {e}")
+    HAS_EPHEMERIS = False
 
 
 # =============================================================================
@@ -121,7 +131,8 @@ def get_db_connection(cfg: Dict[str, Any]):
             port=cfg["port"],
             dbname=cfg["dbname"],
             user=cfg["user"],
-            password=cfg["password"]
+            password=cfg["password"],
+            connect_timeout=2
         )
         return conn
     except Exception as e:
@@ -337,9 +348,21 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
                 dt_end = datetime.strptime(norm_end, "%Y-%m-%d")
                 span_years = round((dt_end - dt_start).days / 365.25, 2)
             except Exception:
+                dt_start = datetime.now()
+                dt_end = dt_start
                 span_years = None
 
-            # Build final Response Payload
+            # Compute Transit Ephemeris & Gochara Timeline for the window
+            transit_data = None
+            if HAS_EPHEMERIS and dt_start and dt_end:
+                try:
+                    lagna_idx = parse_sign_to_index(person_row.get("birth_lagna", "Dhanus"), default=9)
+                    rashi_idx = parse_sign_to_index(person_row.get("birth_rashi", "Vrischigam"), default=8)
+                    transit_data = generate_transit_timeline(dt_start, dt_end, lagna_idx, rashi_idx)
+                except Exception as ex:
+                    print(f"Notice: Transit calculation error: {ex}")
+
+            # Build final Response Payload ("One Punch" Natal + Transit)
             response_payload = {
                 "unique_response_id": unique_response_id,
                 "running_number": running_num,
@@ -366,6 +389,7 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
                     "granularity": "Pratyantardasha (PD) Level",
                     "intervals": dasha_intervals
                 },
+                "transit_ephemeris_timeline": transit_data,
                 "server_timestamp": datetime.now().isoformat()
             }
 
@@ -405,6 +429,51 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
     return get_fallback_data(person_id, norm_start, norm_end)
 
 
+def query_transit_only(cfg: Dict[str, Any], person_id: str, start_date_str: str, end_date_str: str) -> Dict[str, Any]:
+    """
+    Dedicated Transit Ephemeris query for the 9 Grahas across the requested timeline.
+    Calculates sidereal signs, minute sputa degrees, nakshatra & pada, retrograde,
+    and relative houses from native's natal Lagna and Janma Rashi.
+    """
+    norm_start = normalize_date(start_date_str, default_to_end_of_month=False)
+    norm_end = normalize_date(end_date_str, default_to_end_of_month=True)
+    try:
+        dt_start = datetime.strptime(norm_start, "%Y-%m-%d")
+        dt_end = datetime.strptime(norm_end, "%Y-%m-%d")
+    except Exception:
+        dt_start = datetime.now()
+        dt_end = dt_start
+
+    natal_lagna = "Dhanus (Sagittarius)"
+    natal_rashi = "Vrischigam (Scorpio)"
+
+    conn = get_db_connection(cfg)
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT birth_lagna, birth_rashi FROM person_master WHERE person_id = %s;", (person_id,))
+            row = cur.fetchone()
+            if row:
+                natal_lagna = row.get("birth_lagna") or natal_lagna
+                natal_rashi = row.get("birth_rashi") or natal_rashi
+            cur.close()
+            conn.close()
+        except Exception:
+            if conn: conn.close()
+
+    lagna_idx = parse_sign_to_index(natal_lagna, 9) if HAS_EPHEMERIS else 9
+    rashi_idx = parse_sign_to_index(natal_rashi, 8) if HAS_EPHEMERIS else 8
+
+    if HAS_EPHEMERIS:
+        transit_result = generate_transit_timeline(dt_start, dt_end, lagna_idx, rashi_idx)
+    else:
+        transit_result = {"error": "Vedic ephemeris calculation module not available"}
+
+    transit_result["person_id"] = person_id
+    transit_result["server_timestamp"] = datetime.now().isoformat()
+    return transit_result
+
+
 # =============================================================================
 # 5. HTTP REST API HANDLER
 # =============================================================================
@@ -433,8 +502,9 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             self._set_headers(200)
             self.wfile.write(json.dumps({
                 "status": "healthy",
-                "service": "Vedic Astrology REST API",
+                "service": "Vedic Astrology REST API (Natal + Transit)",
                 "database_status": db_status,
+                "ephemeris_engine": "active" if HAS_EPHEMERIS else "unavailable",
                 "timestamp": datetime.now().isoformat()
             }, indent=2).encode())
             return
@@ -470,7 +540,7 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             return
 
         elif parsed.path.startswith("/api/horoscope/query"):
-            # Also support GET via query parameters: ?person_id=001ME&start_date=1998-01-01&end_date=2020-01-31
+            # Complete unified ("one punch") Natal + Transit payload
             params = urllib.parse.parse_qs(parsed.query)
             person_id = params.get("person_id", ["001ME"])[0]
             start_date = params.get("start_date", ["1998-01-01"])[0]
@@ -482,6 +552,18 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
             return
 
+        elif parsed.path.startswith("/api/transit/query"):
+            # Dedicated transit ephemeris query
+            params = urllib.parse.parse_qs(parsed.query)
+            person_id = params.get("person_id", ["001ME"])[0]
+            start_date = params.get("start_date", ["1998-01-01"])[0]
+            end_date = params.get("end_date", ["2020-01-31"])[0]
+
+            result = query_transit_only(cfg, person_id, start_date, end_date)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
+            return
+
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode())
 
@@ -490,6 +572,7 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
         cfg = load_config()
 
         if parsed.path == "/api/horoscope/query":
+            # Complete unified ("one punch") Natal + Transit payload
             content_length = int(self.headers.get("Content-Length", 0))
             body_bytes = self.rfile.read(content_length)
             try:
@@ -507,6 +590,24 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
             return
 
+        elif parsed.path == "/api/transit/query":
+            # Dedicated transit ephemeris query
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_bytes = self.rfile.read(content_length)
+            try:
+                data = json.loads(body_bytes.decode()) if body_bytes else {}
+            except Exception:
+                data = {}
+
+            person_id = data.get("person_id", "001ME")
+            start_date = data.get("start_date", "1998-01-01")
+            end_date = data.get("end_date", "2020-01-31")
+
+            result = query_transit_only(cfg, person_id, start_date, end_date)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
+            return
+
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode())
 
@@ -520,14 +621,15 @@ def run_server(port: int = 5000):
     server_address = (cfg.get("api_host", "0.0.0.0"), port)
     httpd = HTTPServer(server_address, HoroscopeApiHandler)
     print("=" * 75)
-    print(f" 🚀 VEDIC ASTROLOGY REST API SERVER STARTED")
+    print(f" 🚀 VEDIC ASTROLOGY REST API SERVER STARTED (NATAL + TRANSIT)")
     print("=" * 75)
-    print(f" URL:              http://localhost:{port}")
-    print(f" POST Endpoint:    http://localhost:{port}/api/horoscope/query")
-    print(f" GET Endpoint:     http://localhost:{port}/api/horoscope/query?person_id=001ME&start_date=1998-01-01&end_date=2020-01-31")
-    print(f" History:          http://localhost:{port}/api/user-queries/recent")
-    print(f" PostgreSQL:       {cfg['user']}@{cfg['host']}:{cfg['port']}/{cfg['dbname']}")
-    print(f" Audit Table:      user_queries (running_number cycle 1..100)")
+    print(f" URL:                   http://localhost:{port}")
+    print(f" Unified API (1-Punch): POST http://localhost:{port}/api/horoscope/query")
+    print(f" Transit API (Gochara): POST http://localhost:{port}/api/transit/query")
+    print(f" History:               http://localhost:{port}/api/user-queries/recent")
+    print(f" PostgreSQL:            {cfg['user']}@{cfg['host']}:{cfg['port']}/{cfg['dbname']}")
+    print(f" Audit Table:           user_queries (running_number cycle 1..100)")
+    print(f" Ephemeris Engine:      Lahiri / Chitra Paksha (9 Grahas)")
     print("=" * 75)
     print("Press Ctrl+C to terminate.")
     try:

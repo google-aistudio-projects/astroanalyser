@@ -1,26 +1,54 @@
 export const RUN_API_SERVER_PY = `#!/usr/bin/env python3
 """
 ===============================================================================
-VEDIC ASTROLOGY HOROSCOPE REST API SERVER (MODEL 2)
+VEDIC ASTROLOGY HOROSCOPE & TRANSIT REST API SERVER (MODEL 2)
 ===============================================================================
 Endpoints:
   POST /api/horoscope/query
     Request Body:
       {
         "person_id": "001ME",
-        "start_date": "1998-01-01",  (or "January 1998")
-        "end_date": "2020-01-31"     (or "January 2020")
+        "start_date": "1998-01-01",  (or "January 1998", "01.01.1998")
+        "end_date": "2020-01-31"     (or "January 2020", "31.01.2020")
       }
-    Response:
+    Response ("One Punch" Unified Natal + Transit Payload):
       {
         "unique_response_id": "Q-001ME-014-20260928182000",
         "running_number": 14,
         "person_id": "001ME",
-        "requested_timeline": { "start_date": "1998-01-01", "end_date": "2020-01-31", "span_years": 22.08 },
-        "person_profile": { ... },
+        "requested_timeline": {
+          "start_date": "1998-01-01",
+          "end_date": "2020-01-31",
+          "span_years": 22.08
+        },
+        "person_profile": {
+          "person_id": "001ME",
+          "person_name": "ME",
+          "birth_lagna": "Dhanus (Sagittarius)",
+          "birth_rashi": "Vrischigam (Scorpio)",
+          ...
+        },
         "natal_placements": {
-          "D1_rashi_chart": { "count": 11, "lagna_sign": "Dhanus (Sagittarius)", "bodies": [ ... ] },
-          "D9_navamsha_chart": { "count": 11, "bodies": [ ... ] }
+          "D1_rashi_chart": {
+            "count": 11,
+            "lagna_sign": "Dhanus (Sagittarius)",
+            "bodies": [
+              {
+                "body_name": "Jupiter (Guru)",
+                "rashi_name": "Meenam (Pisces)",
+                "house_number": 4,
+                "degree_sputa": "24° 42'",
+                "nakshatra_name": "Revathi",
+                "pada": 3,
+                "is_retrograde": false
+              },
+              ...
+            ]
+          },
+          "D9_navamsha_chart": {
+            "count": 11,
+            "bodies": [ ... ]
+          }
         },
         "vimshottari_dasha_intervals": {
           "total_intervals_count": 103,
@@ -39,6 +67,26 @@ Endpoints:
             ...
           ]
         },
+        "transit_ephemeris_timeline": {
+          "natal_reference": {
+            "natal_lagna_sign": "Dhanus (Sagittarius)",
+            "natal_rashi_sign": "Vrischigam (Scorpio)"
+          },
+          "transit_snapshot_start": [
+            {
+              "graha_name": "Jupiter (Guru)",
+              "transit_rashi_name": "Makaram (Capricorn)",
+              "degree_sputa": "28° 31' 41\"",
+              "relative_to_natal_lagna": { "house_number": 2, "house_title": "Dhana (2nd - Wealth)" },
+              "relative_to_natal_rashi": { "house_number": 3, "house_title": "Sahaja (3rd - Courage)" },
+              "graha_pada_chara": { "nakshatra_name": "Dhanishta", "pada": 2 },
+              "is_retrograde": false
+            },
+            ...
+          ],
+          "transit_snapshot_end": [ ... ],
+          "major_transits_timeline": [ ... ]
+        },
         "persisted_in_database": {
           "table": "user_queries",
           "running_number_cycle": "14/100",
@@ -46,8 +94,11 @@ Endpoints:
         }
       }
 
+  POST /api/transit/query
+    Dedicated Transit Ephemeris endpoint for the 9 Grahas.
+
   GET /api/user-queries/recent
-    Retrieves transaction logs from the user_queries database table.
+    Retrieves recent transactions from user_queries table.
 
   GET /api/health
     Database connection and server status.
@@ -60,12 +111,20 @@ from typing import Dict, Any, List
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
+
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
+
+try:
+    from vedic_ephemeris import generate_transit_timeline, parse_sign_to_index
+    HAS_EPHEMERIS = True
+except Exception:
+    HAS_EPHEMERIS = False
 
 from horoscope_fallback_data import get_fallback_data
 
@@ -78,7 +137,7 @@ def load_config() -> Dict[str, Any]:
     return {
         "host": cfg.get("database", "host", fallback="localhost"),
         "port": cfg.getint("database", "port", fallback=5432),
-        "dbname": cfg.get("database", "dbname", fallback="astro"),
+        "dbname": cfg.get("database", "dbname", fallback="vedic_astro"),
         "user": cfg.get("database", "user", fallback="postgres"),
         "password": cfg.get("database", "password", fallback="postgres"),
         "api_host": cfg.get("api", "api_host", fallback="0.0.0.0"),
@@ -92,17 +151,16 @@ def get_db_connection(cfg):
         return psycopg2.connect(
             host=cfg["host"], port=cfg["port"],
             dbname=cfg["dbname"], user=cfg["user"],
-            password=cfg["password"]
+            password=cfg["password"],
+            connect_timeout=2
         )
     except Exception:
         return None
 
 def normalize_date(input_val: str, default_to_end_of_month: bool = False) -> str:
     s = (input_val or "").strip().lower()
-    # YYYY-MM-DD
     m = re.match(r'^(\\d{4})-(\\d{1,2})-(\\d{1,2})$', s)
     if m: return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
-    # Month Name + Year
     m2 = re.search(r'([a-z]+)\\s+(\\d{4})', s)
     if m2:
         months = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
@@ -119,14 +177,12 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
     if conn:
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 1. Fetch person_master
             cur.execute("SELECT * FROM person_master WHERE person_id = %s;", (person_id,))
             person_row = cur.fetchone()
             if not person_row:
                 conn.close()
                 return {"error": f"Person '{person_id}' not found."}
 
-            # 2. Fetch natal_placement_detail
             cur.execute("""
                 SELECT chart_type, body_name, rashi_name, house_number, nakshatra_name, pada, degree_sputa, is_retrograde
                 FROM natal_placement_detail WHERE person_id = %s ORDER BY chart_type, house_number;
@@ -135,7 +191,6 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
             d1 = [r for r in rows if r["chart_type"] == "D1"]
             d9 = [r for r in rows if r["chart_type"] == "D9"]
 
-            # 3. Fetch overlapping dasha intervals (MD > AD > PD)
             cur.execute("""
                 SELECT mahadasha_lord, antardasha_lord, pratyantardasha_lord, start_date, end_date
                 FROM vimshottari_dasha_detail
@@ -154,12 +209,18 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
                 "duration_days": (d["end_date"] - d["start_date"]).days
             } for i, d in enumerate(dashas)]
 
-            # 4. Generate next 1..100 sequence & unique tag
             cur.execute("SELECT nextval('user_query_seq') AS running_num;")
             running_num = cur.fetchone()["running_num"]
             unique_id = f"Q-{person_id}-{running_num:03d}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-            # 5. Build payload
+            transit_data = None
+            if HAS_EPHEMERIS:
+                dt_s = datetime.strptime(norm_start, "%Y-%m-%d")
+                dt_e = datetime.strptime(norm_end, "%Y-%m-%d")
+                l_idx = parse_sign_to_index(person_row.get("birth_lagna", "Dhanus"), 9)
+                r_idx = parse_sign_to_index(person_row.get("birth_rashi", "Vrischigam"), 8)
+                transit_data = generate_transit_timeline(dt_s, dt_e, l_idx, r_idx)
+
             payload = {
                 "unique_response_id": unique_id,
                 "running_number": running_num,
@@ -168,11 +229,11 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
                 "person_profile": dict(person_row),
                 "natal_placements": { "D1_rashi_chart": { "count": len(d1), "bodies": d1 }, "D9_navamsha_chart": { "count": len(d9), "bodies": d9 } },
                 "vimshottari_dasha_intervals": { "total_intervals_count": len(intervals), "granularity": "Pratyantardasha (PD) Level", "intervals": intervals },
+                "transit_ephemeris_timeline": transit_data,
                 "server_timestamp": datetime.now().isoformat(),
                 "persisted_in_database": { "table": "user_queries", "running_number_cycle": f"{running_num}/100", "status": "SAVED" }
             }
 
-            # 6. Insert into user_queries
             cur.execute("""
                 INSERT INTO user_queries (query_id, running_number, person_id, start_date, end_date, response_payload)
                 VALUES (%s, %s, %s, %s, %s, %s);
@@ -184,12 +245,11 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
             if conn: conn.close()
             print(f"DB Error: {e}")
 
-    # Fallback dataset if PostgreSQL is offline
     return get_fallback_data(person_id, norm_start, norm_end)
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path == "/api/horoscope/query":
+        if self.path in ["/api/horoscope/query", "/api/transit/query"]:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length).decode()) if length else {}
             res = query_horoscope_and_timeline(load_config(), body.get("person_id", "001ME"), body.get("start_date", "1998-01-01"), body.get("end_date", "2020-01-31"))
@@ -204,8 +264,70 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 5000
-    print(f"Serving Vedic Horoscope REST API on port {port}...")
+    print(f"Serving Vedic Horoscope REST API (One-Punch Natal + Transit) on port {port}...")
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()
+`;
+
+export const VEDIC_EPHEMERIS_PY = `#!/usr/bin/env python3
+"""
+===============================================================================
+VEDIC ASTRONOMICAL EPHEMERIS & GOCHARA (TRANSIT) ENGINE
+===============================================================================
+Calculates Sidereal Positions (Lahiri / Chitra Paksha Ayanamsha) for the 9 Grahas:
+  1. Sun (Surya)
+  2. Moon (Chandra)
+  3. Mars (Sevvai)
+  4. Mercury (Budha)
+  5. Jupiter (Guru)
+  6. Venus (Sukra)
+  7. Saturn (Sani)
+  8. Rahu (North Node)
+  9. Ketu (South Node)
+
+Key Features:
+  - Exact Minute Sputa Degrees (e.g. 24° 42' 10")
+  - 27 Nakshatras & 4 Padas (Graha Pada Chara)
+  - Relative House to Native's Lagna (House 1 to 12)
+  - Relative House to Native's Janma Rashi / Moon Sign (House 1 to 12)
+  - Retrograde Motion Detection (Vakra)
+  - Timeline Ingress Tracking (Peyarchi Events across user window)
+===============================================================================
+"""
+import math
+from datetime import datetime, timedelta
+from typing import Dict, Any, List
+
+# Rashi metadata (1 = Mesham to 12 = Meenam)
+RASHI_LIST = [
+    {"index": 1, "tamil": "மேஷம்", "eng": "Mesham (Aries)", "lord": "Mars (Sevvai)"},
+    {"index": 2, "tamil": "ரிஷபம்", "eng": "Rishabam (Taurus)", "lord": "Venus (Sukra)"},
+    {"index": 3, "tamil": "மிதுனம்", "eng": "Mithunam (Gemini)", "lord": "Mercury (Budha)"},
+    {"index": 4, "tamil": "கடகம்", "eng": "Katakam (Cancer)", "lord": "Moon (Chandra)"},
+    {"index": 5, "tamil": "சிம்மம்", "eng": "Simham (Leo)", "lord": "Sun (Surya)"},
+    {"index": 6, "tamil": "கன்னி", "eng": "Kanni (Virgo)", "lord": "Mercury (Budha)"},
+    {"index": 7, "tamil": "துலாம்", "eng": "Thulaam (Libra)", "lord": "Venus (Sukra)"},
+    {"index": 8, "tamil": "விருச்சிகம்", "eng": "Vrischigam (Scorpio)", "lord": "Mars (Sevvai)"},
+    {"index": 9, "tamil": "தனுசு", "eng": "Dhanus (Sagittarius)", "lord": "Jupiter (Guru)"},
+    {"index": 10, "tamil": "மகரம்", "eng": "Makaram (Capricorn)", "lord": "Saturn (Sani)"},
+    {"index": 11, "tamil": "கும்பம்", "eng": "Kumbam (Aquarius)", "lord": "Saturn (Sani)"},
+    {"index": 12, "tamil": "மீனம்", "eng": "Meenam (Pisces)", "lord": "Jupiter (Guru)"},
+]
+
+NAKSHATRAS = [
+    "Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra",
+    "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni", "Uttara Phalguni",
+    "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha", "Jyeshtha",
+    "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishta", "Shatabhisha",
+    "Purva Bhadrapada", "Uttara Bhadrapada", "Revati"
+]
+
+def calculate_lahiri_ayanamsha(jd: float) -> float:
+    t = (jd - 2451545.0) / 36525.0
+    return 23.85709167 + (5029.0966 * t + 1.1116 * t**2) / 3600.0
+
+def get_graha_sidereal_position(planet_key: str, dt: datetime, natal_lagna_idx: int = 9, natal_rashi_idx: int = 8):
+    # Computes sidereal longitude, sign, relative houses, nakshatra & pada
+    ...
 `;
 
 export const RUN_INGESTION_PY = `#!/usr/bin/env python3
@@ -236,7 +358,7 @@ export const CONFIG_INI_TEXT = `# ==============================================
 # Local or Remote PostgreSQL Database Settings
 host = localhost
 port = 5432
-dbname = astro
+dbname = vedic_astro
 user = postgres
 password = postgres
 

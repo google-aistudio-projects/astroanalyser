@@ -37,6 +37,7 @@ import RestApiStudio from './components/RestApiStudio';
 import {
   RUN_API_SERVER_PY,
   RUN_INGESTION_PY,
+  VEDIC_EPHEMERIS_PY,
   CONFIG_INI_TEXT,
   SCHEMA_SQL_TEXT
 } from './data/scriptData';
@@ -80,7 +81,7 @@ export default function App() {
   const [dashaFilter, setDashaFilter] = useState<string>('all');
   const [searchDasha, setSearchDasha] = useState<string>('');
   const [copied, setCopied] = useState<string | null>(null);
-  const [pythonSubTab, setPythonSubTab] = useState<'model2_api' | 'model1_ingestion' | 'config_ini' | 'schema_sql'>('model2_api');
+  const [pythonSubTab, setPythonSubTab] = useState<'model2_api' | 'model1_ingestion' | 'vedic_ephemeris' | 'config_ini' | 'schema_sql'>('model2_api');
 
   // REST API Explorer States (Model 2)
   const [apiPersonId, setApiPersonId] = useState<string>('001ME');
@@ -1141,6 +1142,8 @@ def main():
                           ? RUN_API_SERVER_PY
                           : pythonSubTab === 'model1_ingestion'
                           ? RUN_INGESTION_PY
+                          : pythonSubTab === 'vedic_ephemeris'
+                          ? VEDIC_EPHEMERIS_PY
                           : pythonSubTab === 'config_ini'
                           ? CONFIG_INI_TEXT
                           : SCHEMA_SQL_TEXT;
@@ -1158,6 +1161,8 @@ def main():
                         downloadFile('run_api_server.py', RUN_API_SERVER_PY, 'text/x-python');
                       } else if (pythonSubTab === 'model1_ingestion') {
                         downloadFile('run_ingestion.py', RUN_INGESTION_PY, 'text/x-python');
+                      } else if (pythonSubTab === 'vedic_ephemeris') {
+                        downloadFile('vedic_ephemeris.py', VEDIC_EPHEMERIS_PY, 'text/x-python');
                       } else if (pythonSubTab === 'config_ini') {
                         downloadFile('config.ini', CONFIG_INI_TEXT, 'text/plain');
                       } else {
@@ -1177,6 +1182,7 @@ def main():
                 {[
                   { id: 'model2_api', label: '🚀 Model 2: run_api_server.py (REST API)' },
                   { id: 'model1_ingestion', label: '📄 Model 1: run_ingestion.py (PDF Ingestion)' },
+                  { id: 'vedic_ephemeris', label: '🌐 scripts/vedic_ephemeris.py (Transit Engine)' },
                   { id: 'config_ini', label: '⚙️ config.ini (Shared Settings)' },
                   { id: 'schema_sql', label: '🗄️ schema.sql (DDL & Sequence)' },
                 ].map(sub => (
@@ -1202,6 +1208,8 @@ def main():
                     ? 'Model 2 REST API Execution Guide'
                     : pythonSubTab === 'model1_ingestion'
                     ? 'Model 1 PDF Ingestion Execution Guide'
+                    : pythonSubTab === 'vedic_ephemeris'
+                    ? 'Vedic Ephemeris & Gochara Astronomical Engine'
                     : pythonSubTab === 'config_ini'
                     ? 'Central Configuration Guide'
                     : 'Target Database DDL Schema'}
@@ -1253,6 +1261,29 @@ def main():
                   </div>
                 )}
 
+                {pythonSubTab === 'vedic_ephemeris' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">1. Lahiri Ayanamsha</div>
+                      <span className="text-[11px] text-amber-300">
+                        Chitra Paksha sidereal conversion for all 9 Grahas.
+                      </span>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">2. Dual Relative Houses</div>
+                      <span className="text-[11px] text-cyan-300">
+                        Computes house from Native Lagna &amp; Janma Rashi.
+                      </span>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                      <div className="font-bold text-slate-200 mb-1">3. Graha Pada Chara</div>
+                      <span className="text-[11px] text-emerald-400">
+                        27 Nakshatras &amp; 4 Padas with retrograde calculation.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {pythonSubTab === 'config_ini' && (
                   <p className="text-xs text-slate-300">
                     Both Model 1 and Model 2 read from this file. Adjust database credentials or API host/port here.
@@ -1274,17 +1305,22 @@ def main():
                       ? 'run_api_server.py (HTTP + PostgreSQL)'
                       : pythonSubTab === 'model1_ingestion'
                       ? 'run_ingestion.py (CLI Runner)'
+                      : pythonSubTab === 'vedic_ephemeris'
+                      ? 'vedic_ephemeris.py (Ephemeris Engine)'
                       : pythonSubTab === 'config_ini'
                       ? 'config.ini (ConfigParser)'
                       : 'schema.sql (PostgreSQL DDL)'}
                   </span>
                 </div>
-                <pre className="bg-slate-950 text-slate-200 p-5 rounded-xl border border-slate-800 text-xs font-mono overflow-x-auto max-h-[500px] leading-relaxed">
+
+                <pre className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-cyan-300 overflow-x-auto max-h-[500px] leading-relaxed">
                   <code>
                     {pythonSubTab === 'model2_api'
                       ? RUN_API_SERVER_PY
                       : pythonSubTab === 'model1_ingestion'
                       ? RUN_INGESTION_PY
+                      : pythonSubTab === 'vedic_ephemeris'
+                      ? VEDIC_EPHEMERIS_PY
                       : pythonSubTab === 'config_ini'
                       ? CONFIG_INI_TEXT
                       : SCHEMA_SQL_TEXT}

@@ -1,7 +1,16 @@
 """
 Fallback data provider for Horoscope 001ME when PostgreSQL is offline or running standalone.
 """
+import sys, os
 from datetime import datetime, date
+
+# Ensure scripts folder is importable
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
+try:
+    from vedic_ephemeris import generate_transit_timeline, parse_sign_to_index
+    HAS_EPHEMERIS = True
+except Exception:
+    HAS_EPHEMERIS = False
 
 # Cycling fallback counter (1 to 100)
 _fallback_counter = 1
@@ -312,7 +321,19 @@ def get_fallback_data(person_id: str, start_date: str, end_date: str):
         dt_end = datetime.strptime(end_date, "%Y-%m-%d")
         span_years = round((dt_end - dt_start).days / 365.25, 2)
     except Exception:
+        dt_start = datetime.now()
+        dt_end = dt_start
         span_years = None
+
+    # Calculate Transit Ephemeris Timeline for all 9 Grahas
+    transit_data = None
+    if HAS_EPHEMERIS:
+        try:
+            lagna_idx = parse_sign_to_index(person_profile.get("birth_lagna", "Dhanus"), default=9)
+            rashi_idx = parse_sign_to_index(person_profile.get("birth_rashi", "Vrischigam"), default=8)
+            transit_data = generate_transit_timeline(dt_start, dt_end, lagna_idx, rashi_idx)
+        except Exception as e:
+            print(f"Notice: Transit calculation error: {e}")
 
     return {
         "unique_response_id": unique_response_id,
@@ -340,6 +361,7 @@ def get_fallback_data(person_id: str, start_date: str, end_date: str):
             "granularity": "Pratyantardasha (PD) Level",
             "intervals": filtered_intervals
         },
+        "transit_ephemeris_timeline": transit_data,
         "server_timestamp": datetime.now().isoformat(),
         "persisted_in_database": {
             "table": "user_queries",

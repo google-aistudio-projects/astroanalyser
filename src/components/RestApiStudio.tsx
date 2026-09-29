@@ -17,7 +17,10 @@ import {
   Hash,
   Table,
   Compass,
-  AlertCircle
+  AlertCircle,
+  Globe,
+  Orbit,
+  Eye
 } from 'lucide-react';
 import {
   HoroscopeApiResponse,
@@ -58,9 +61,11 @@ export default function RestApiStudio({
   downloadFile
 }: RestApiStudioProps) {
   const [loading, setLoading] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'natal' | 'json' | 'clients' | 'audit'>('timeline');
+  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'natal' | 'transit' | 'json' | 'clients' | 'audit'>('transit');
   const [dashaSearch, setDashaSearch] = useState('');
   const [selectedChartType, setSelectedChartType] = useState<'D1' | 'D9'>('D1');
+  const [transitViewMode, setTransitViewMode] = useState<'snapshot_start' | 'snapshot_end' | 'timeline_events'>('snapshot_start');
+  const [transitSearch, setTransitSearch] = useState('');
 
   const handleRunQuery = () => {
     setLoading(true);
@@ -383,6 +388,11 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
                 icon: Compass
               },
               {
+                id: 'transit',
+                label: `Transit Ephemeris (9 Grahas Gochara)`,
+                icon: Globe
+              },
+              {
                 id: 'json',
                 label: `Full JSON Response Payload`,
                 icon: Code2
@@ -591,7 +601,222 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
             </div>
           )}
 
-          {/* SUB-TAB 3: RAW JSON RESPONSE */}
+          {/* SUB-TAB: TRANSIT EPHEMERIS (GOCHARA) */}
+          {activeSubTab === 'transit' && apiResponse.transit_ephemeris_timeline && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-emerald-400" />
+                    Ephemeris Transit Engine (Gochara Timeline for 9 Grahas)
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Calculated with Lahiri (Chitra Paksha) Ayanamsha. Computes sign positions, exact minute sputa, nakshatra &amp; pada,
+                    and houses relative to both Natal Lagna and Natal Janma Rashi.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                    <button
+                      onClick={() => setTransitViewMode('snapshot_start')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        transitViewMode === 'snapshot_start' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Start Snapshot ({apiResponse.requested_timeline.start_date})
+                    </button>
+                    <button
+                      onClick={() => setTransitViewMode('snapshot_end')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        transitViewMode === 'snapshot_end' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      End Snapshot ({apiResponse.requested_timeline.end_date})
+                    </button>
+                    <button
+                      onClick={() => setTransitViewMode('timeline_events')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        transitViewMode === 'timeline_events' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Sign Ingress Events ({apiResponse.transit_ephemeris_timeline.major_transits_timeline_count})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Native's Reference Banner */}
+              <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex flex-wrap items-center justify-between text-xs gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-300">Native's Baseline Reference:</span>
+                    <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold">
+                      Lagna: {apiResponse.transit_ephemeris_timeline.natal_reference.natal_lagna_sign}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold">
+                      Janma Rashi: {apiResponse.transit_ephemeris_timeline.natal_reference.natal_rashi_sign}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-amber-300/90 font-mono">
+                    Relative House Rule: ((Transit Sign - Baseline Sign) % 12) + 1
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80 leading-relaxed">
+                  💡 <strong className="text-slate-200">User Specification Verified:</strong> When <strong>Jupiter (Guru)</strong> transits{' '}
+                  <strong className="text-amber-300">Katakam (Cancer / Karka)</strong>, the engine calculates it as{' '}
+                  <span className="text-cyan-400 font-bold">8th House (Ashtama)</span> from native's Dhanus Lagna, and{' '}
+                  <span className="text-rose-400 font-bold">9th House (Bhagya)</span> from native's Vrischigam Moon sign.
+                  Each and every Graha is calculated with both perspectives simultaneously!
+                </div>
+              </div>
+
+              {/* 9 Graha Snapshot Table */}
+              {(transitViewMode === 'snapshot_start' || transitViewMode === 'snapshot_end') && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-800 text-slate-300 font-mono text-[11px] uppercase">
+                      <tr>
+                        <th className="py-2.5 px-3">Graha (Planet)</th>
+                        <th className="py-2.5 px-3">Transit Rashi (Sign)</th>
+                        <th className="py-2.5 px-3">Degree (Sputa)</th>
+                        <th className="py-2.5 px-3">Nakshatra &amp; Pada</th>
+                        <th className="py-2.5 px-3 text-center bg-cyan-950/30 text-cyan-300">
+                          Relative to Lagna (Dhanus)
+                        </th>
+                        <th className="py-2.5 px-3 text-center bg-rose-950/30 text-rose-300">
+                          Relative to Moon (Vrischigam)
+                        </th>
+                        <th className="py-2.5 px-3 text-center">Motion</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {(transitViewMode === 'snapshot_start'
+                        ? apiResponse.transit_ephemeris_timeline.transit_snapshot_start
+                        : apiResponse.transit_ephemeris_timeline.transit_snapshot_end
+                      ).map(g => (
+                        <tr key={g.graha_key} className="hover:bg-slate-800/40">
+                          <td className="py-2.5 px-3 font-bold text-white flex items-center gap-1.5">
+                            <span>{g.graha_name}</span>
+                            <span className="text-[10px] text-slate-400 font-normal">({g.graha_tamil})</span>
+                          </td>
+                          <td className="py-2.5 px-3 font-semibold text-amber-300">
+                            {g.transit_rashi_name}{' '}
+                            <span className="text-[10px] text-slate-400">({g.transit_rashi_tamil})</span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-cyan-400">
+                            {g.degree_sputa}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300">
+                            <span className="font-semibold text-slate-200">{g.graha_pada_chara.nakshatra_name}</span>
+                            <span className="text-amber-400 ml-1">Pada {g.graha_pada_chara.pada}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center bg-cyan-950/10">
+                            <span className="font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                              House {g.relative_to_natal_lagna.house_number}
+                            </span>
+                            <span className="block text-[10px] text-slate-400 mt-0.5">
+                              {g.relative_to_natal_lagna.house_title}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center bg-rose-950/10">
+                            <span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                              House {g.relative_to_natal_rashi.house_number}
+                            </span>
+                            <span className="block text-[10px] text-slate-400 mt-0.5">
+                              {g.relative_to_natal_rashi.house_title}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {g.is_retrograde ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                RETROGRADE
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 text-[10px]">DIRECT</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Major Sign Ingress Events Timeline */}
+              {transitViewMode === 'timeline_events' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">
+                      Chronological list of planetary sign entries throughout the requested timeline:
+                    </span>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Filter planet or sign..."
+                        value={transitSearch}
+                        onChange={e => setTransitSearch(e.target.value)}
+                        className="pl-8 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-800 text-slate-300 font-mono text-[11px] uppercase sticky top-0 z-10">
+                        <tr>
+                          <th className="py-2.5 px-3">Graha</th>
+                          <th className="py-2.5 px-3">Transit Rashi</th>
+                          <th className="py-2.5 px-3">Start Date</th>
+                          <th className="py-2.5 px-3">End Date</th>
+                          <th className="py-2.5 px-3 text-center">From Lagna</th>
+                          <th className="py-2.5 px-3 text-center">From Rashi</th>
+                          <th className="py-2.5 px-3">Star Occupied</th>
+                          <th className="py-2.5 px-3">Summary</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 text-slate-300">
+                        {apiResponse.transit_ephemeris_timeline.major_transits_timeline
+                          .filter(
+                            ev =>
+                              !transitSearch.trim() ||
+                              ev.graha_name.toLowerCase().includes(transitSearch.toLowerCase()) ||
+                              ev.transit_rashi_name.toLowerCase().includes(transitSearch.toLowerCase()) ||
+                              ev.start_date.includes(transitSearch)
+                          )
+                          .map((ev, idx) => (
+                            <tr key={idx} className="hover:bg-slate-800/40">
+                              <td className="py-2 px-3 font-bold text-white">{ev.graha_name}</td>
+                              <td className="py-2 px-3 font-semibold text-amber-300">{ev.transit_rashi_name}</td>
+                              <td className="py-2 px-3 font-mono text-cyan-400">{ev.start_date}</td>
+                              <td className="py-2 px-3 font-mono text-rose-400">{ev.end_date}</td>
+                              <td className="py-2 px-3 text-center">
+                                <span className="font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded text-[11px]">
+                                  House {ev.house_from_natal_lagna}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded text-[11px]">
+                                  House {ev.house_from_natal_rashi}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-slate-300">
+                                {ev.nakshatra_name} (Pada {ev.pada})
+                              </td>
+                              <td className="py-2 px-3 text-slate-400 text-[11px] font-mono">
+                                {ev.summary_text}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {activeSubTab === 'json' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">

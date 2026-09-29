@@ -1,8 +1,15 @@
-# Tamil Horoscope (Jadhagam) Ingestion & REST API Engine 🕉️
+# Tamil Horoscope (Jadhagam) Ingestion, REST API & Transit Ephemeris Engine 🕉️
 
 A dual-model Vedic astrology data engineering pipeline and REST API server designed to:
-1. **Model 1 (`run_ingestion.py`)**: Extract structured data from **Tamil Horoscope PDFs (ஜாதகம் / Jadhagam)** and load them directly into a normalized **PostgreSQL** schema.
-2. **Model 2 (`run_api_server.py`)**: Serve a high-performance REST API that takes a `person_id` and date timeline (e.g., `January 1998` to `January 2020`), returns D1 & D9 chart placements with full Pratyantardasha (MD > AD > PD) timeline intervals, generates a cycling 1..100 running number, and persists every query transaction into the `user_queries` table.
+1. **Model 1 (`run_ingestion.py`)**: Extract structured data from **Tamil Horoscope PDFs (ஜாதகம் / Jadhagam)** and load them directly into a normalized **PostgreSQL** schema (`person_master`, `natal_placement_detail`, `vimshottari_dasha_detail`).
+2. **Model 2 (`run_api_server.py`)**: Serve a high-performance REST API that takes a `person_id` and date timeline (e.g., `January 1998` to `January 2020`), returns a **unified "One Punch" REST response** containing:
+   - **Natal Chart Placements**: D1 (Rashi) and D9 (Navamsha) charts with degrees, houses relative to Lagna, nakshatras, padas, and retrograde flags.
+   - **Vimshottari Dasha Intervals**: Every sequential sub-period down to **Pratyantardasha (PD / Anthara)** level with duration and lord hierarchies.
+   - **Transit Ephemeris (Gochara)**: Complete planetary transit data for the **standard 9 Grahas** (Jupiter, Saturn, Mars, Rahu, Ketu, Venus, Mercury, Sun, Moon) across the requested window, including sign name, exact minute sputa degrees, nakshatra, and pada (Graha Pada Chara), plus **dual relative house positions**:
+     - **Relative to Native's Lagna** (e.g. Jupiter in Katakam/Cancer = 8th house from Dhanus Lagna)
+     - **Relative to Native's Janma Rashi / Moon Sign** (e.g. Jupiter in Katakam/Cancer = 9th house from Vrischigam Moon)
+   - **1..100 Cycling Unique Sequence**: Auto-assigned sequence tag (`Q-001ME-014-20260928182000`) and cycling counter (1 to 100).
+   - **Audit Persistence**: Automatically records every query transaction into the `user_queries` table.
 
 ---
 
@@ -11,7 +18,8 @@ A dual-model Vedic astrology data engineering pipeline and REST API server desig
 | Model | Component Script | Execution | Primary Function |
 | :--- | :--- | :--- | :--- |
 | **Model 1** | `run_ingestion.py` | `python run_ingestion.py` | Parses `horoscope.pdf`, extracts birth metadata, D1/D9 grids, and 40 pages of Vimshottari dasha, then loads into PostgreSQL (`person_master`, `natal_placement_detail`, `vimshottari_dasha_detail`). |
-| **Model 2** | `run_api_server.py` | `python run_api_server.py` | Starts REST API server on port 5000. Provides `POST /api/horoscope/query`, fetches placements + all PD-level intervals for requested range, cycles sequence 1..100, and logs into `user_queries`. |
+| **Model 2** | `run_api_server.py` | `python run_api_server.py` | Starts REST API server on port 5000. Provides unified `POST /api/horoscope/query` (Natal + Transit in one punch) and dedicated `POST /api/transit/query`, cycles sequence 1..100, and logs into `user_queries`. |
+| **Ephemeris Engine** | `scripts/vedic_ephemeris.py` | Import or CLI | High-precision astronomical ephemeris (Lahiri / Chitra Paksha Ayanamsha) calculating 9 Grahas sidereal positions, minute sputa degrees, 27 nakshatras, 4 padas, retrograde motions, and relative houses from Lagna and Janma Rashi. |
 
 ---
 
@@ -21,6 +29,8 @@ A dual-model Vedic astrology data engineering pipeline and REST API server desig
 - **Dual Tamil Font Encoding Engine**: Transparently handles both modern **UTF-8 Unicode Tamil** and legacy **8-bit Bamini/Vanavil ASCII glyphs** (such as `#hp` for சூரியன், `rdp` for சனி, and `jDR` for தனுசு).
 - **South Indian 4×4 Grid Translation**: Dynamically maps 12 zodiac signs and calculates sequential house numbers (**House 1 to 12 clockwise**) relative to the native's Lagna.
 - **Timeline Dasha Extractor (Model 2)**: For any given date window, extracts each and every sub-period down to **Pratyantardasha (PD / Anthara)** level with exact duration in days and lord hierarchies.
+- **Unified "One-Punch" Response**: Merges Natal chart placements, Vimshottari Dasha intervals, and Transit Ephemeris into a single comprehensive JSON payload.
+- **Complete Gochara (Transit) Ephemeris**: Computes sidereal coordinates for all 9 Grahas using analytical Keplerian & VSOP87 orbital models with Lahiri Ayanamsha. Computes house relative to Lagna and Moon sign simultaneously.
 - **1..100 Cycling Unique Sequence**: Uses a dedicated cycling PostgreSQL sequence (`user_query_seq`) to assign a unique running number 1 to 100 for every query, alongside a timestamped unique tag (e.g., `Q-001ME-014-20260928182000`).
 - **Transaction Audit Logging**: Automatically records every generated JSON response, requested date range, and sequence number into the `user_queries` table.
 - **Config-Driven Execution**: Control database credentials, PDF paths, and API host/port in `config.ini`.
@@ -218,6 +228,49 @@ print(f"Stored in DB:  {data['persisted_in_database']['table']}")
         "end_date": "1998-02-04",
         "duration_days": 50
       }
+    ]
+  },
+  "transit_ephemeris_timeline": {
+    "requested_timeline": { "start_date": "1998-01-01", "end_date": "2020-01-31", "span_years": 22.08 },
+    "natal_reference": {
+      "natal_lagna_sign": "Dhanus (Sagittarius)",
+      "natal_rashi_sign": "Vrischigam (Scorpio)"
+    },
+    "transit_snapshot_start": [
+      {
+        "graha_name": "Jupiter (Guru)",
+        "graha_tamil": "குரு",
+        "transit_rashi_name": "Makaram (Capricorn)",
+        "degree_sputa": "28° 31' 41\"",
+        "graha_pada_chara": { "nakshatra_name": "Dhanishta", "pada": 2 },
+        "relative_to_natal_lagna": {
+          "house_number": 2,
+          "house_title": "Dhana (2nd - Wealth / Family)",
+          "description": "2nd house from Natal Lagna (Dhanus)"
+        },
+        "relative_to_natal_rashi": {
+          "house_number": 3,
+          "house_title": "Sahaja (3rd - Courage / Siblings)",
+          "description": "3rd house from Janma Rashi (Vrischigam)"
+        },
+        "is_retrograde": false,
+        "motion_state": "Direct (நேர்கதி)"
+      }
+    ],
+    "transit_snapshot_end": [ ... ],
+    "major_transits_timeline": [
+      {
+        "graha_name": "Jupiter (Guru)",
+        "transit_rashi_name": "Katakam (Cancer)",
+        "start_date": "2002-07-06",
+        "end_date": "2003-07-30",
+        "house_from_natal_lagna": 8,
+        "house_from_natal_rashi": 9,
+        "nakshatra_name": "Pushya",
+        "pada": 3,
+        "summary_text": "Jupiter in Katakam (8th from Lagna, 9th from Moon)"
+      },
+      ...
     ]
   },
   "server_timestamp": "2026-09-28T18:20:00.123456",
