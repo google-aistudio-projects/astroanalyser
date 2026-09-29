@@ -37,6 +37,7 @@ import {
   pingApiHealth,
   ApiFetchResult
 } from '../data/apiService';
+import { START_CMD_TEXT, START_SH_TEXT } from '../data/scriptData';
 
 interface RestApiStudioProps {
   apiPersonId: string;
@@ -1703,23 +1704,76 @@ print(prompt_markdown[:400])
           {/* SUB-TAB 4: CLIENT CALL SNIPPETS */}
           {activeSubTab === 'clients' && (
             <div className="space-y-4">
-              {/* How to run API server */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-bold text-white">
-                  <Terminal className="w-4 h-4 text-amber-400" />
-                  Step 1: Start the REST API Server (Model 2)
+              {/* How to run API server & All-In-One Launcher */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-bold text-white">
+                    <Terminal className="w-4 h-4 text-emerald-400" />
+                    Unified One-Go Startup Script (starts both REST API &amp; UI together)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyToClipboard(START_CMD_TEXT, 'copy_start_cmd')}
+                      className="inline-flex items-center gap-1 text-xs text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded border border-slate-700 transition"
+                    >
+                      <Copy className="w-3 h-3 text-amber-400" />
+                      {copied === 'copy_start_cmd' ? 'Copied start.cmd!' : 'Copy start.cmd'}
+                    </button>
+                    <button
+                      onClick={() => downloadFile('start.cmd', START_CMD_TEXT, 'text/plain')}
+                      className="inline-flex items-center gap-1 text-xs text-slate-950 font-bold bg-amber-500 hover:bg-amber-400 px-2.5 py-1 rounded transition"
+                    >
+                      <Download className="w-3 h-3" />
+                      Download start.cmd
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-300">
-                  Run the dedicated REST API script in your terminal. It reads settings from <code className="text-amber-400">config.ini</code>:
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Avoid starting UI and Python services separately! Use the newly updated <strong>start.cmd</strong> (Windows) or <strong>npm run start:all</strong> (Cross-Platform) to launch both the Python REST API server (port 5000) and the Vite frontend (port 3000) simultaneously with live console health &amp; readiness status:
                 </p>
-                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-amber-400">
-                  <code>python run_api_server.py</code>
-                  <button
-                    onClick={() => copyToClipboard('python run_api_server.py', 'cmd_api')}
-                    className="text-slate-400 hover:text-white"
-                  >
-                    {copied === 'cmd_api' ? 'Copied' : <Copy className="w-3.5 h-3.5" />}
-                  </button>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                  <div className="bg-slate-950 p-3.5 rounded-lg border border-amber-500/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-amber-400 font-bold text-[11px]">Option A: Windows Batch (start.cmd)</span>
+                      <button
+                        onClick={() => copyToClipboard('start.cmd', 'cmd_bat')}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        {copied === 'cmd_bat' ? 'Copied' : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <code className="text-emerald-300 block">start.cmd</code>
+                    <p className="text-[11px] text-slate-400 font-sans">
+                      Double-click in Windows Explorer or execute in cmd. Launches REST API in a monitored window and starts the Vite UI.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 p-3.5 rounded-lg border border-cyan-500/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-cyan-400 font-bold text-[11px]">Option B: Cross-Platform (NPM / Node)</span>
+                      <button
+                        onClick={() => copyToClipboard('npm run start:all', 'cmd_npm_all')}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        {copied === 'cmd_npm_all' ? 'Copied' : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <code className="text-cyan-300 block">npm run start:all</code>
+                    <p className="text-[11px] text-slate-400 font-sans">
+                      Runs concurrently on Windows, Linux, and macOS. Streams both service outputs with colored tags.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                  <div className="font-semibold text-slate-300">Individual Manual Commands:</div>
+                  <div className="flex flex-wrap items-center gap-3 font-mono">
+                    <span className="text-amber-400">Terminal 1: <code>python run_api_server.py</code> (Port 5000)</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-cyan-400">Terminal 2: <code>npm run dev</code> (Port 3000)</span>
+                  </div>
                 </div>
               </div>
 
