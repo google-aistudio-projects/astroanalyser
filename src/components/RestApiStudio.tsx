@@ -75,6 +75,7 @@ export default function RestApiStudio({
   const [selectedChartType, setSelectedChartType] = useState<'D1' | 'D9'>('D1');
   const [transitViewMode, setTransitViewMode] = useState<'timeline_events' | 'saturn_tracker' | 'snapshot_start' | 'snapshot_end'>('timeline_events');
   const [transitSearch, setTransitSearch] = useState('');
+  const [selectedGrahaFilter, setSelectedGrahaFilter] = useState<string>('all');
   const [markdownView, setMarkdownView] = useState<'preview' | 'raw'>('preview');
   const [apiBaseUrl, setApiBaseUrl] = useState('http://localhost:5000');
   const [outputFormat, setOutputFormat] = useState<'full' | 'llm_markdown'>('full');
@@ -917,28 +918,6 @@ print(prompt_markdown[:400])
                 </div>
               </div>
 
-              {/* Vedic Astrological Disambiguation Notice */}
-              <div className="bg-slate-950/80 p-4 rounded-xl border border-indigo-500/30 space-y-2 text-xs">
-                <div className="flex items-center gap-2 text-amber-400 font-bold">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Important Vedic Astrological Distinction: Natal Chart vs Dasha vs Transit</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-300">
-                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
-                    <strong className="text-cyan-400 block mb-1">1. Natal Birth Chart (D1)</strong>
-                    Static snapshot at birth moment (Jan 26, 1976). Saturn is frozen in <strong>Katakam (House 8)</strong> forever in this native's D1 chart.
-                  </div>
-                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
-                    <strong className="text-purple-400 block mb-1">2. Vimshottari Dasha Periods</strong>
-                    Mathematical directional time-lords. Native was born with <strong>13y 2m 5d</strong> balance of Saturn Mahadasha (1976-1989). That is a time ruler, NOT a physical transit.
-                  </div>
-                  <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
-                    <strong className="text-emerald-400 block mb-1">3. Gochara (Transit Ephemeris)</strong>
-                    Real physical motion of the planets. Saturn completes the 12 signs in <strong>29.45 years (~2.46 years or 30 months per sign)</strong>.
-                  </div>
-                </div>
-              </div>
-
               {/* Native's Reference Banner */}
               <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 space-y-2">
                 <div className="flex flex-wrap items-center justify-between text-xs gap-3">
@@ -965,59 +944,196 @@ print(prompt_markdown[:400])
                 </div>
               </div>
 
-              {/* Visual Breadcrumb of Saturn's Systematic Progression */}
+              {/* Graha Interactive Filter Bar & Controls */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                      <Compass className="w-4 h-4 text-amber-400" />
+                      Planetary Transit Paths &amp; Orbit Progressions ({apiResponse.requested_timeline.start_date} → {apiResponse.requested_timeline.end_date})
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Visual path for each planet across your requested timeline. Click any graha to filter both the paths and timeline events table simultaneously:
+                    </p>
+                  </div>
+                  <div className="relative min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filter planet or sign..."
+                      value={transitSearch}
+                      onChange={e => setTransitSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Graha Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
+                  {[
+                    { key: 'all', label: 'All Grahas (அனைத்தும்)', icon: '🌟' },
+                    { key: 'Saturn', label: 'Saturn (சனி)', icon: '🪐' },
+                    { key: 'Jupiter', label: 'Jupiter (குரு)', icon: '⭐' },
+                    { key: 'Rahu', label: 'Rahu (ராகு)', icon: '🐉' },
+                    { key: 'Ketu', label: 'Ketu (கேது)', icon: '☄️' },
+                    { key: 'Mars', label: 'Mars (செவ்வாய்)', icon: '🔴' },
+                    { key: 'Sun', label: 'Sun (சூரியன்)', icon: '☀️' },
+                  ].map(tab => {
+                    const isSelected = selectedGrahaFilter === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setSelectedGrahaFilter(tab.key)}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold transition ${
+                          isSelected
+                            ? 'bg-amber-500 text-slate-950 shadow font-bold'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
+                        }`}
+                      >
+                        <span>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                  {selectedGrahaFilter !== 'all' && (
+                    <button
+                      onClick={() => {
+                        setSelectedGrahaFilter('all');
+                        setTransitSearch('');
+                      }}
+                      className="ml-auto text-[11px] text-amber-400/80 hover:text-amber-300 underline font-mono"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Dynamic Path Illustrations for All (or Filtered) Grahas */}
               {(() => {
-                const saturnIngresses = apiResponse.transit_ephemeris_timeline.major_transits_timeline
-                  .filter(ev => ev.graha_name.includes('Saturn') || ev.graha_name.includes('சனி'));
+                const ALL_GRAHAS_META = [
+                  { key: 'Saturn', name: 'Saturn (Sani / சனி)', icon: '🪐', speed: '~2.5 yrs / sign', border: 'border-amber-500/30', headerColor: 'text-amber-400' },
+                  { key: 'Jupiter', name: 'Jupiter (Guru / குரு)', icon: '⭐', speed: '~1 yr / sign', border: 'border-yellow-500/30', headerColor: 'text-yellow-400' },
+                  { key: 'Rahu', name: 'Rahu (ராகு)', icon: '🐉', speed: '~1.5 yrs / sign (Rx)', border: 'border-purple-500/30', headerColor: 'text-purple-400' },
+                  { key: 'Ketu', name: 'Ketu (கேது)', icon: '☄️', speed: '~1.5 yrs / sign (Rx)', border: 'border-rose-500/30', headerColor: 'text-rose-400' },
+                  { key: 'Mars', name: 'Mars (Sevvai / செவ்வாய்)', icon: '🔴', speed: '~45 days / sign', border: 'border-red-500/30', headerColor: 'text-red-400' },
+                  { key: 'Sun', name: 'Sun (Surya / சூரியன்)', icon: '☀️', speed: '~30 days / sign', border: 'border-orange-500/30', headerColor: 'text-orange-400' },
+                ];
+
+                const matchingGrahas = ALL_GRAHAS_META.filter(g => {
+                  const matchesPill = selectedGrahaFilter === 'all' || g.key.toLowerCase() === selectedGrahaFilter.toLowerCase();
+                  const matchesSearch = !transitSearch.trim() ||
+                    g.name.toLowerCase().includes(transitSearch.toLowerCase()) ||
+                    g.key.toLowerCase().includes(transitSearch.toLowerCase()) ||
+                    apiResponse.transit_ephemeris_timeline.major_transits_timeline.some(ev =>
+                      ev.graha_name.toLowerCase().includes(g.key.toLowerCase()) &&
+                      (ev.transit_rashi_name.toLowerCase().includes(transitSearch.toLowerCase()) ||
+                        ev.start_date.includes(transitSearch) ||
+                        ev.end_date.includes(transitSearch))
+                    );
+                  return matchesPill && matchesSearch;
+                });
+
+                if (matchingGrahas.length === 0) {
+                  return (
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center text-xs text-slate-400">
+                      No planetary paths match filter &ldquo;{selectedGrahaFilter !== 'all' ? selectedGrahaFilter : transitSearch}&rdquo;.
+                      <button
+                        onClick={() => {
+                          setSelectedGrahaFilter('all');
+                          setTransitSearch('');
+                        }}
+                        className="ml-2 underline text-amber-400"
+                      >
+                        Reset filters
+                      </button>
+                    </div>
+                  );
+                }
 
                 return (
-                  <div className="space-y-2">
-                    <div className="bg-slate-950 p-3 rounded-xl border border-amber-500/20 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between text-xs gap-2">
-                        <span className="font-bold text-amber-400 flex items-center gap-1.5">
-                          <span>🪐</span> Saturn (Sani) Path in this Query ({apiResponse.requested_timeline.start_date} → {apiResponse.requested_timeline.end_date}):
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          {saturnIngresses.length} Sign Phase{saturnIngresses.length > 1 ? 's' : ''} Found
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                        {saturnIngresses.map((ev, i, arr) => (
-                          <React.Fragment key={i}>
-                            <div
-                              className="flex-shrink-0 bg-slate-900 border border-slate-700/80 hover:border-amber-400 px-3 py-2 rounded-lg text-center cursor-pointer transition shadow-sm"
-                              onClick={() => setTransitViewMode('saturn_tracker')}
-                              title={`${ev.transit_rashi_name}: ${ev.start_date} to ${ev.end_date}`}
-                            >
-                              <div className="font-bold text-amber-300 text-xs">{ev.transit_rashi_name}</div>
-                              <div className="text-[11px] text-slate-300 font-mono mt-0.5">
-                                {ev.start_date} → {ev.end_date}
-                              </div>
-                              <div className="text-[10px] text-cyan-400 font-semibold mt-0.5">
-                                House {ev.house_from_natal_lagna} (Lagna) &bull; House {ev.house_from_natal_rashi} (Moon)
-                              </div>
-                            </div>
-                            {i < arr.length - 1 && (
-                              <ArrowRight className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="space-y-3">
+                    {matchingGrahas.map(g => {
+                      const planetIngresses = apiResponse.transit_ephemeris_timeline.major_transits_timeline.filter(
+                        ev => ev.graha_name.toLowerCase().includes(g.key.toLowerCase())
+                      );
 
-                    {saturnIngresses.length > 1 && (
-                      <div className="bg-emerald-950/20 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-200 flex items-start gap-2.5">
-                        <Sparkles className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <strong className="text-white block mb-0.5">
-                            Saturn Moves Out of {saturnIngresses[0].transit_rashi_name} During This Query Window!
-                          </strong>
-                          <span>
-                            Saturn was in <strong>{saturnIngresses[0].transit_rashi_name}</strong> from {saturnIngresses[0].start_date} until {saturnIngresses[0].end_date}, then entered <strong>{saturnIngresses[1].transit_rashi_name}</strong> on {saturnIngresses[1].start_date}!
-                          </span>
+                      return (
+                        <div
+                          key={g.key}
+                          className={`bg-slate-950 p-3.5 rounded-xl border ${g.border} space-y-2.5 transition hover:border-slate-600`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">{g.icon}</span>
+                              <span className={`font-bold ${g.headerColor}`}>{g.name} Path:</span>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                ({g.speed})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono">
+                                {planetIngresses.length} Sign Phase{planetIngresses.length > 1 ? 's' : ''} in Query
+                              </span>
+                              <button
+                                onClick={() => setSelectedGrahaFilter(selectedGrahaFilter === g.key ? 'all' : g.key)}
+                                className={`text-[10px] px-2 py-0.5 rounded font-semibold transition ${
+                                  selectedGrahaFilter === g.key
+                                    ? 'bg-amber-500 text-slate-950'
+                                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                                }`}
+                              >
+                                {selectedGrahaFilter === g.key ? 'Showing Only' : 'Isolate'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Horizontal Path Breadcrumbs */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                            {planetIngresses.map((ev, i, arr) => (
+                              <React.Fragment key={i}>
+                                <div
+                                  className="flex-shrink-0 bg-slate-900 border border-slate-700/80 hover:border-amber-400 px-3 py-2 rounded-lg text-center transition shadow-sm"
+                                  title={`${ev.graha_name} in ${ev.transit_rashi_name} (${ev.start_date} to ${ev.end_date})`}
+                                >
+                                  <div className="font-bold text-amber-300 text-xs">
+                                    {ev.transit_rashi_name}
+                                    <span className="text-[10px] text-slate-400 font-normal ml-1">
+                                      ({ev.transit_rashi_tamil})
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-300 font-mono mt-0.5">
+                                    {ev.start_date} → {ev.end_date}
+                                  </div>
+                                  <div className="text-[10px] text-cyan-400 font-semibold mt-0.5">
+                                    House {ev.house_from_natal_lagna} (Lagna) &bull; House {ev.house_from_natal_rashi} (Moon)
+                                  </div>
+                                  <div className="text-[9px] text-slate-500 mt-0.5 font-mono">
+                                    {ev.nakshatra_name} (P{ev.pada})
+                                  </div>
+                                </div>
+                                {i < arr.length - 1 && (
+                                  <ArrowRight className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </div>
+
+                          {/* Sign Shift Notification if multiple ingresses */}
+                          {planetIngresses.length > 1 && (
+                            <div className="bg-emerald-950/20 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-[11px] text-emerald-200 flex items-center gap-2">
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                              <span>
+                                <strong>Sign Ingress Detected:</strong> {g.name} moved from{' '}
+                                <strong className="text-white">{planetIngresses[0].transit_rashi_name}</strong> to{' '}
+                                <strong className="text-emerald-300">{planetIngresses[1].transit_rashi_name}</strong> on{' '}
+                                <strong className="text-white font-mono">{planetIngresses[1].start_date}</strong>!
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -1133,10 +1249,17 @@ print(prompt_markdown[:400])
             {/* Major Sign Ingress Events Timeline */}
               {transitViewMode === 'timeline_events' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400">
-                      Chronological list of planetary sign entries throughout the requested timeline:
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">
+                        Chronological list of planetary sign entries throughout the requested timeline:
+                      </span>
+                      {selectedGrahaFilter !== 'all' && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                          Filtering: {selectedGrahaFilter}
+                        </span>
+                      )}
+                    </div>
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                       <input
@@ -1165,13 +1288,15 @@ print(prompt_markdown[:400])
                       </thead>
                       <tbody className="divide-y divide-slate-800 text-slate-300">
                         {apiResponse.transit_ephemeris_timeline.major_transits_timeline
-                          .filter(
-                            ev =>
-                              !transitSearch.trim() ||
+                          .filter(ev => {
+                            const matchesGraha = selectedGrahaFilter === 'all' || ev.graha_name.toLowerCase().includes(selectedGrahaFilter.toLowerCase());
+                            const matchesSearch = !transitSearch.trim() ||
                               ev.graha_name.toLowerCase().includes(transitSearch.toLowerCase()) ||
                               ev.transit_rashi_name.toLowerCase().includes(transitSearch.toLowerCase()) ||
-                              ev.start_date.includes(transitSearch)
-                          )
+                              ev.start_date.includes(transitSearch) ||
+                              ev.end_date.includes(transitSearch);
+                            return matchesGraha && matchesSearch;
+                          })
                           .map((ev, idx) => (
                             <tr key={idx} className="hover:bg-slate-800/40">
                               <td className="py-2 px-3 font-bold text-white">{ev.graha_name}</td>
