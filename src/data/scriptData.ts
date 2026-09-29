@@ -248,6 +248,14 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
     return get_fallback_data(person_id, norm_start, norm_end)
 
 class Handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.end_headers()
+
     def do_POST(self):
         if self.path in ["/api/horoscope/query", "/api/transit/query"]:
             length = int(self.headers.get("Content-Length", 0))
@@ -261,6 +269,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/markdown; charset=utf-8")
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Private-Network", "true")
                 self.end_headers()
                 self.wfile.write(md_text.encode("utf-8"))
                 return
@@ -268,6 +277,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200 if "error" not in res else 404)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
             self.wfile.write(json.dumps(res, indent=2, ensure_ascii=False, default=str).encode())
             return

@@ -78,16 +78,20 @@ export default function RestApiStudio({
   const [markdownView, setMarkdownView] = useState<'preview' | 'raw'>('preview');
   const [apiBaseUrl, setApiBaseUrl] = useState('http://localhost:5000');
   const [outputFormat, setOutputFormat] = useState<'full' | 'llm_markdown'>('full');
-  const [backendStatus, setBackendStatus] = useState<{ ok: boolean; statusText: string; latencyMs: number; details?: any } | null>(null);
+  const [backendStatus, setBackendStatus] = useState<{ ok: boolean; statusText: string; latencyMs: number; details?: any; endpointUsed?: string } | null>(null);
   const [pinging, setPinging] = useState(false);
-  const [lastFetchMeta, setLastFetchMeta] = useState<{ source: 'live_server' | 'fallback_simulator'; statusCode: number; durationMs: number; error?: string } | null>(null);
+  const [lastFetchMeta, setLastFetchMeta] = useState<{ source: 'live_server' | 'fallback_simulator'; statusCode: number; durationMs: number; error?: string; endpointUsed?: string } | null>(null);
   const [rawServerMarkdown, setRawServerMarkdown] = useState<string | null>(null);
 
-  const testBackendConnection = async () => {
+  const testBackendConnection = async (targetUrl?: string) => {
+    const urlToTest = targetUrl !== undefined ? targetUrl : apiBaseUrl;
     setPinging(true);
     try {
-      const res = await pingApiHealth(apiBaseUrl);
+      const res = await pingApiHealth(urlToTest);
       setBackendStatus(res);
+      if (res.ok && res.endpointUsed && res.endpointUsed !== apiBaseUrl && res.endpointUsed !== 'relative /api') {
+        setApiBaseUrl(res.endpointUsed);
+      }
     } finally {
       setPinging(false);
     }
@@ -109,8 +113,15 @@ export default function RestApiStudio({
         source: result.source,
         statusCode: result.statusCode,
         durationMs: result.durationMs,
-        error: result.error
+        error: result.error,
+        endpointUsed: result.endpointUsed
       });
+      if (result.source === 'live_server' && result.endpointUsed) {
+        const cleanBase = result.endpointUsed.replace(/\/api\/horoscope\/query$/, '');
+        if (cleanBase && cleanBase !== apiBaseUrl) {
+          setApiBaseUrl(cleanBase);
+        }
+      }
       setQueryHistory(prev => [
         {
           query_id: result.data.unique_response_id,
@@ -142,8 +153,15 @@ export default function RestApiStudio({
         source: result.source,
         statusCode: result.statusCode,
         durationMs: result.durationMs,
-        error: result.error
+        error: result.error,
+        endpointUsed: result.endpointUsed
       });
+      if (result.source === 'live_server' && result.endpointUsed) {
+        const cleanBase = result.endpointUsed.replace(/\/api\/horoscope\/query$/, '');
+        if (cleanBase && cleanBase !== apiBaseUrl) {
+          setApiBaseUrl(cleanBase);
+        }
+      }
       setQueryHistory(prev => [
         {
           query_id: result.data.unique_response_id,
@@ -320,7 +338,7 @@ print(prompt_markdown[:400])
             />
             <button
               type="button"
-              onClick={testBackendConnection}
+              onClick={() => testBackendConnection()}
               disabled={pinging}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition disabled:opacity-50"
             >
@@ -484,6 +502,66 @@ print(prompt_markdown[:400])
             )}
           </button>
         </div>
+
+        {/* Diagnostic Troubleshooting Card when live server could not be reached */}
+        {lastFetchMeta?.source === 'fallback_simulator' && (
+          <div className="bg-amber-950/20 border border-amber-500/40 rounded-xl p-4 text-xs text-amber-200 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-white block mb-1">
+                  Browser Cannot Reach Python Server directly ({apiBaseUrl})
+                </strong>
+                <p className="text-slate-300 leading-relaxed font-mono text-[11px]">
+                  {lastFetchMeta.error}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-500/20">
+              <span className="text-slate-400 font-semibold">1-Click Quick Solutions:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setApiBaseUrl('http://127.0.0.1:5000');
+                  testBackendConnection('http://127.0.0.1:5000');
+                }}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition font-mono"
+              >
+                Use 127.0.0.1:5000 (Fixes Windows IPv6)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setApiBaseUrl('/api');
+                  testBackendConnection('/api');
+                }}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition font-mono"
+              >
+                Use /api (Vite Dev Proxy)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setApiBaseUrl('http://localhost:5000');
+                  testBackendConnection('http://localhost:5000');
+                }}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition font-mono"
+              >
+                Use localhost:5000
+              </button>
+            </div>
+
+            <div className="text-[11px] text-slate-400 bg-slate-950/40 p-2.5 rounded-lg border border-slate-800">
+              💡 <strong>Why cURL works but browser doesn't:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-300">
+                <li>If you are viewing this app via an <strong>HTTPS</strong> cloud URL, modern browsers strictly block HTTP requests to localhost (Mixed Content Security).</li>
+                <li>To allow direct browser-to-Python communication, open the app locally at <strong className="text-amber-300">http://localhost:3000</strong> using <code className="text-amber-400">npm run dev</code>.</li>
+                <li>On Windows, <code className="text-cyan-300">http://127.0.0.1:5000</code> connects instantly over IPv4 where <code className="text-cyan-300">localhost</code> might resolve to IPv6 <code className="text-slate-400">::1</code>.</li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Query Response Header & Metadata */}
