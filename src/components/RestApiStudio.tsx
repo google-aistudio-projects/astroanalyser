@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Server,
   Play,
@@ -22,14 +22,20 @@ import {
   Orbit,
   Eye,
   FileText,
-  ShieldCheck
+  ShieldCheck,
+  Wifi,
+  WifiOff,
+  Activity
 } from 'lucide-react';
 import {
   HoroscopeApiResponse,
   UserQueryLog,
   executeHoroscopeTimelineQuery,
   normalizeDateString,
-  generateLlmMarkdown
+  generateLlmMarkdown,
+  fetchHoroscopeFromApi,
+  pingApiHealth,
+  ApiFetchResult
 } from '../data/apiService';
 
 interface RestApiStudioProps {
@@ -70,49 +76,89 @@ export default function RestApiStudio({
   const [transitViewMode, setTransitViewMode] = useState<'snapshot_start' | 'snapshot_end' | 'timeline_events'>('snapshot_start');
   const [transitSearch, setTransitSearch] = useState('');
   const [markdownView, setMarkdownView] = useState<'preview' | 'raw'>('preview');
+  const [apiBaseUrl, setApiBaseUrl] = useState('http://localhost:5000');
+  const [outputFormat, setOutputFormat] = useState<'full' | 'llm_markdown'>('full');
+  const [backendStatus, setBackendStatus] = useState<{ ok: boolean; statusText: string; latencyMs: number; details?: any } | null>(null);
+  const [pinging, setPinging] = useState(false);
+  const [lastFetchMeta, setLastFetchMeta] = useState<{ source: 'live_server' | 'fallback_simulator'; statusCode: number; durationMs: number; error?: string } | null>(null);
+  const [rawServerMarkdown, setRawServerMarkdown] = useState<string | null>(null);
 
-  const handleRunQuery = () => {
+  const testBackendConnection = async () => {
+    setPinging(true);
+    try {
+      const res = await pingApiHealth(apiBaseUrl);
+      setBackendStatus(res);
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  useEffect(() => {
+    testBackendConnection();
+  }, [apiBaseUrl]);
+
+  const handleRunQuery = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const res = executeHoroscopeTimelineQuery(apiPersonId, apiStartDate, apiEndDate);
-      setApiResponse(res);
+    try {
+      const result = await fetchHoroscopeFromApi(apiBaseUrl, apiPersonId, apiStartDate, apiEndDate, outputFormat);
+      setApiResponse(result.data);
+      if (result.rawMarkdown) {
+        setRawServerMarkdown(result.rawMarkdown);
+      }
+      setLastFetchMeta({
+        source: result.source,
+        statusCode: result.statusCode,
+        durationMs: result.durationMs,
+        error: result.error
+      });
       setQueryHistory(prev => [
         {
-          query_id: res.unique_response_id,
-          running_number: res.running_number,
-          person_id: res.person_id,
-          start_date: res.requested_timeline.start_date,
-          end_date: res.requested_timeline.end_date,
-          created_at: res.server_timestamp,
-          response_payload: res
+          query_id: result.data.unique_response_id,
+          running_number: result.data.running_number,
+          person_id: result.data.person_id,
+          start_date: result.data.requested_timeline.start_date,
+          end_date: result.data.requested_timeline.end_date,
+          created_at: result.data.server_timestamp,
+          response_payload: result.data
         },
         ...prev.slice(0, 29)
       ]);
+    } finally {
       setLoading(false);
-    }, 200);
+    }
   };
 
-  const applyPreset = (start: string, end: string) => {
+  const applyPreset = async (start: string, end: string) => {
     setApiStartDate(start);
     setApiEndDate(end);
     setLoading(true);
-    setTimeout(() => {
-      const res = executeHoroscopeTimelineQuery(apiPersonId, start, end);
-      setApiResponse(res);
+    try {
+      const result = await fetchHoroscopeFromApi(apiBaseUrl, apiPersonId, start, end, outputFormat);
+      setApiResponse(result.data);
+      if (result.rawMarkdown) {
+        setRawServerMarkdown(result.rawMarkdown);
+      }
+      setLastFetchMeta({
+        source: result.source,
+        statusCode: result.statusCode,
+        durationMs: result.durationMs,
+        error: result.error
+      });
       setQueryHistory(prev => [
         {
-          query_id: res.unique_response_id,
-          running_number: res.running_number,
-          person_id: res.person_id,
-          start_date: res.requested_timeline.start_date,
-          end_date: res.requested_timeline.end_date,
-          created_at: res.server_timestamp,
-          response_payload: res
+          query_id: result.data.unique_response_id,
+          running_number: result.data.running_number,
+          person_id: result.data.person_id,
+          start_date: result.data.requested_timeline.start_date,
+          end_date: result.data.requested_timeline.end_date,
+          created_at: result.data.server_timestamp,
+          response_payload: result.data
         },
         ...prev.slice(0, 29)
       ]);
+    } finally {
       setLoading(false);
-    }, 150);
+    }
   };
 
   // Filter dasha intervals based on user search
@@ -259,6 +305,84 @@ print(prompt_markdown[:400])
           </div>
         </div>
 
+        {/* Live Backend Connection Bar */}
+        <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+              <Server className="w-3.5 h-3.5 text-indigo-400" /> REST API Server:
+            </span>
+            <input
+              type="text"
+              value={apiBaseUrl}
+              onChange={e => setApiBaseUrl(e.target.value)}
+              placeholder="http://localhost:5000"
+              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-slate-200 font-mono text-xs w-56 focus:outline-none focus:border-amber-400"
+            />
+            <button
+              type="button"
+              onClick={testBackendConnection}
+              disabled={pinging}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${pinging ? 'animate-spin' : ''}`} />
+              Test Ping
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {backendStatus?.ok ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
+                <Wifi className="w-3.5 h-3.5" />
+                Live Python Server Online ({backendStatus.latencyMs}ms)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20" title="Run 'python run_api_server.py' in your terminal">
+                <WifiOff className="w-3.5 h-3.5" />
+                Python Server Offline (Run `python run_api_server.py`)
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Output Format Switcher */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/60">
+          <div className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-amber-400" />
+            Query Output Mode:
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOutputFormat('full');
+                setActiveSubTab('json');
+              }}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                outputFormat === 'full'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              Default Full JSON (Everything)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOutputFormat('llm_markdown');
+                setActiveSubTab('markdown');
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                outputFormat === 'llm_markdown'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm font-bold'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              Option B: LLM Markdown (Zero PII)
+            </button>
+          </div>
+        </div>
+
         {/* Input fields */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -383,6 +507,22 @@ print(prompt_markdown[:400])
                     #{apiResponse.running_number} (Cycle {apiResponse.running_number}/100)
                   </span>
                 </div>
+
+                {lastFetchMeta && (
+                  <div>
+                    {lastFetchMeta.source === 'live_server' ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        <Wifi className="w-3.5 h-3.5" />
+                        Live Python Server Call ({lastFetchMeta.durationMs}ms)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30" title={lastFetchMeta.error}>
+                        <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+                        Simulation Fallback ({lastFetchMeta.error || 'Server offline'})
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3">

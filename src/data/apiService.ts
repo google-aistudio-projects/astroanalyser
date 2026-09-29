@@ -405,6 +405,103 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
   };
 }
 
+export interface ApiFetchResult {
+  data: HoroscopeApiResponse;
+  rawMarkdown?: string;
+  source: 'live_server' | 'fallback_simulator';
+  statusCode: number;
+  durationMs: number;
+  error?: string;
+}
+
+/**
+ * Executes a REAL HTTP POST call to the Python REST API server (e.g. http://localhost:5000/api/horoscope/query)
+ * with graceful fallback to the local simulation if the Python process is offline.
+ */
+export async function fetchHoroscopeFromApi(
+  baseUrl: string,
+  personId: string,
+  startDate: string,
+  endDate: string,
+  format: 'full' | 'llm_markdown' = 'full'
+): Promise<ApiFetchResult> {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const url = `${cleanBase}/api/horoscope/query`;
+  const t0 = performance.now();
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': format === 'llm_markdown' ? 'text/markdown, application/json' : 'application/json'
+      },
+      body: JSON.stringify({
+        person_id: personId,
+        start_date: startDate,
+        end_date: endDate,
+        format: format === 'llm_markdown' ? 'llm_markdown' : 'full'
+      })
+    });
+
+    const durationMs = Math.round(performance.now() - t0);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (res.ok) {
+      if (contentType.includes('text/markdown')) {
+        const mdText = await res.text();
+        const fallbackJson = executeHoroscopeTimelineQuery(personId, startDate, endDate);
+        return {
+          data: fallbackJson,
+          rawMarkdown: mdText,
+          source: 'live_server',
+          statusCode: res.status,
+          durationMs
+        };
+      } else {
+        const json = await res.json();
+        return {
+          data: json,
+          source: 'live_server',
+          statusCode: res.status,
+          durationMs
+        };
+      }
+    } else {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+  } catch (err: any) {
+    const durationMs = Math.round(performance.now() - t0);
+    const fallbackData = executeHoroscopeTimelineQuery(personId, startDate, endDate);
+    return {
+      data: fallbackData,
+      source: 'fallback_simulator',
+      statusCode: 0,
+      durationMs,
+      error: err?.message || 'Connection refused or server offline'
+    };
+  }
+}
+
+/**
+ * Pings the Python REST server health endpoint (/api/health)
+ */
+export async function pingApiHealth(baseUrl: string): Promise<{ ok: boolean; statusText: string; latencyMs: number; details?: any }> {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`${cleanBase}/api/health`, { method: 'GET' });
+    const latencyMs = Math.round(performance.now() - t0);
+    if (res.ok) {
+      const data = await res.json();
+      return { ok: true, statusText: 'Online (HTTP 200)', latencyMs, details: data };
+    }
+    return { ok: false, statusText: `HTTP ${res.status}`, latencyMs };
+  } catch (e: any) {
+    return { ok: false, statusText: 'Offline (Connection refused)', latencyMs: Math.round(performance.now() - t0) };
+  }
+}
+
 /**
  * Transforms any HoroscopeApiResponse into Option B: High-Density LLM Markdown
  * with STRICT PII SANITIZATION (zero human personal details, zero Tamil text noise).
