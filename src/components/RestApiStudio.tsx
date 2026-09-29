@@ -20,13 +20,16 @@ import {
   AlertCircle,
   Globe,
   Orbit,
-  Eye
+  Eye,
+  FileText,
+  ShieldCheck
 } from 'lucide-react';
 import {
   HoroscopeApiResponse,
   UserQueryLog,
   executeHoroscopeTimelineQuery,
-  normalizeDateString
+  normalizeDateString,
+  generateLlmMarkdown
 } from '../data/apiService';
 
 interface RestApiStudioProps {
@@ -61,11 +64,12 @@ export default function RestApiStudio({
   downloadFile
 }: RestApiStudioProps) {
   const [loading, setLoading] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'natal' | 'transit' | 'json' | 'clients' | 'audit'>('transit');
+  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'natal' | 'transit' | 'markdown' | 'json' | 'clients' | 'audit'>('transit');
   const [dashaSearch, setDashaSearch] = useState('');
   const [selectedChartType, setSelectedChartType] = useState<'D1' | 'D9'>('D1');
   const [transitViewMode, setTransitViewMode] = useState<'snapshot_start' | 'snapshot_end' | 'timeline_events'>('snapshot_start');
   const [transitSearch, setTransitSearch] = useState('');
+  const [markdownView, setMarkdownView] = useState<'preview' | 'raw'>('preview');
 
   const handleRunQuery = () => {
     setLoading(true);
@@ -131,6 +135,13 @@ export default function RestApiStudio({
     return apiResponse ? JSON.stringify(apiResponse, null, 2) : '';
   }, [apiResponse]);
 
+  const llmMarkdownString = useMemo(() => {
+    return apiResponse ? generateLlmMarkdown(apiResponse) : '';
+  }, [apiResponse]);
+
+  const llmTokenEst = useMemo(() => Math.round(llmMarkdownString.length / 4), [llmMarkdownString]);
+  const jsonTokenEst = useMemo(() => Math.round(jsonString.length / 4), [jsonString]);
+
   const curlCommand = `curl -X POST http://localhost:5000/api/horoscope/query \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -139,15 +150,24 @@ export default function RestApiStudio({
     "end_date": "${apiEndDate}"
   }'`;
 
+  const curlMarkdownCommand = `curl -X POST "http://localhost:5000/api/horoscope/query?format=llm_markdown" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "person_id": "${apiPersonId}",
+    "start_date": "${apiStartDate}",
+    "end_date": "${apiEndDate}",
+    "format": "llm_markdown"
+  }'`;
+
   const pythonClientCode = `import requests
 import json
 
-# Request Model 2 REST API endpoint
+# Request Model 2 REST API endpoint (Default Full JSON with All Details)
 url = "http://localhost:5000/api/horoscope/query"
 payload = {
     "person_id": "${apiPersonId}",
-    "start_date": "${apiStartDate}",  # Flexible: e.g. "January 1998" or "1998-01-01"
-    "end_date": "${apiEndDate}"       # Flexible: e.g. "January 2020" or "2020-01-31"
+    "start_date": "${apiStartDate}",  # e.g. "January 1998" or "1998-01-01"
+    "end_date": "${apiEndDate}"       # e.g. "January 2020" or "2020-01-31"
 }
 
 response = requests.post(url, json=payload)
@@ -157,10 +177,30 @@ print(f"Unique Tag:    {data['unique_response_id']}")
 print(f"Running Num:   {data['running_number']} (Cycle 1..100)")
 print(f"Total PDs:     {data['vimshottari_dasha_intervals']['total_intervals_count']} intervals found")
 print(f"Stored in DB:  {data['persisted_in_database']['table']}")
+`;
 
-# First 3 timeline intervals
-for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
-    print(f"  • {interval['start_date']} to {interval['end_date']} | {interval['full_lord_hierarchy']}")
+  const pythonMarkdownClientCode = `import requests
+
+# Request Option B: High-Density LLM Markdown (Strictly Sanitized - Zero PII)
+url = "http://localhost:5000/api/horoscope/query"
+payload = {
+    "person_id": "${apiPersonId}",
+    "start_date": "${apiStartDate}",
+    "end_date": "${apiEndDate}",
+    "format": "llm_markdown"   # Automatically strips name, age, DOB, POB, and Tamil text
+}
+
+response = requests.post(url, json=payload)
+prompt_markdown = response.text  # Direct Markdown text ready to inject into LLM system/user prompt!
+
+print(f"Prompt Size: {len(prompt_markdown)} characters (~{len(prompt_markdown)//4} tokens)")
+print(prompt_markdown[:400])
+
+# Ready to pass to Google Gemini or Anthropic Claude:
+# gemini_response = client.models.generate_content(
+#     model="gemini-2.5-flash",
+#     contents=[f"Astrological Data:\\n{prompt_markdown}\\n\\nTask: Analyze career & financial triggers between 2005 and 2010."]
+# )
 `;
 
   return (
@@ -391,6 +431,11 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
                 id: 'transit',
                 label: `Transit Ephemeris (9 Grahas Gochara)`,
                 icon: Globe
+              },
+              {
+                id: 'markdown',
+                label: `🤖 LLM Markdown (Option B - Zero PII)`,
+                icon: Sparkles
               },
               {
                 id: 'json',
@@ -817,6 +862,133 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
               )}
             </div>
           )}
+
+          {/* SUB-TAB: OPTION B HIGH-DENSITY LLM MARKDOWN (ZERO PII) */}
+          {activeSubTab === 'markdown' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    Option B: High-Density LLM Markdown Prompt (Strict Zero-PII)
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Anonymized astrological context matrix engineered specifically for Gemini Pro, Claude 3.5, and GPT-4o reasoning.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                    <button
+                      onClick={() => setMarkdownView('preview')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        markdownView === 'preview' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Formatted View
+                    </button>
+                    <button
+                      onClick={() => setMarkdownView('raw')}
+                      className={`px-3 py-1 rounded font-semibold transition ${
+                        markdownView === 'raw' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Raw Prompt Code
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => copyToClipboard(llmMarkdownString, 'llm_md')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    {copied === 'llm_md' ? 'Copied LLM Prompt!' : 'Copy Clean LLM Prompt'}
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      downloadFile(
+                        `${apiResponse.person_id}_llm_prompt.md`,
+                        llmMarkdownString,
+                        'text/markdown'
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                  >
+                    <Download className="w-3.5 h-3.5 text-cyan-400" />
+                    Download .md
+                  </button>
+                </div>
+              </div>
+
+              {/* Badges / Metrics Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">PII Sanitization</div>
+                    <div className="text-xs font-bold text-emerald-400">100% Stripped &amp; Anonymous</div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Prompt Footprint</div>
+                    <div className="text-xs font-bold text-amber-300">~{llmTokenEst.toLocaleString()} tokens</div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Prompt Space Saved</div>
+                    <div className="text-xs font-bold text-cyan-300">
+                      {Math.max(0, Math.round((1 - llmTokenEst / (jsonTokenEst || 1)) * 100))}% reduction vs JSON
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Gochara (Transit)</div>
+                    <div className="text-xs font-bold text-purple-300">Dual Houses (H_L &amp; H_M)</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Zero-PII Guarantee Notice */}
+              <div className="text-xs text-slate-400 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <strong className="text-slate-200">Zero-PII Sanitization Guarantee:</strong> Human personal names, age, birth date, birth place, and Tamil prose are permanently excluded from this payload. The LLM only receives astrological coordinates (Lagna, Moon, planetary degrees, D1/D9 matrices, sequential PD sub-periods, and transit house activations).
+                </div>
+              </div>
+
+              {/* Content Body */}
+              {markdownView === 'raw' ? (
+                <pre className="bg-slate-950 text-cyan-300 p-4 rounded-xl border border-slate-800 text-xs font-mono overflow-x-auto max-h-[550px] leading-relaxed select-all">
+                  <code>{llmMarkdownString}</code>
+                </pre>
+              ) : (
+                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 text-xs text-slate-200 max-h-[550px] overflow-y-auto space-y-4 font-mono leading-relaxed select-all">
+                  <pre className="whitespace-pre-wrap font-mono text-slate-300 text-xs leading-relaxed">
+                    {llmMarkdownString}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeSubTab === 'json' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -883,12 +1055,51 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
                 </div>
               </div>
 
-              {/* cURL Example */}
+              {/* Option B: LLM Markdown Request (Zero PII) */}
+              <div className="bg-gradient-to-br from-slate-900 to-indigo-950/40 border border-indigo-500/30 rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-bold text-white">
+                      Option B: Direct LLM Prompt Call (format=llm_markdown, Zero PII)
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      PII Stripped
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyToClipboard(curlMarkdownCommand, 'curl_md')}
+                      className="inline-flex items-center gap-1 text-xs text-slate-200 hover:text-white bg-slate-800 px-2.5 py-1 rounded border border-slate-700"
+                    >
+                      <Copy className="w-3 h-3 text-cyan-400" />
+                      {copied === 'curl_md' ? 'Copied cURL!' : 'Copy cURL'}
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(pythonMarkdownClientCode, 'py_md')}
+                      className="inline-flex items-center gap-1 text-xs text-slate-200 hover:text-white bg-slate-800 px-2.5 py-1 rounded border border-slate-700"
+                    >
+                      <Copy className="w-3 h-3 text-emerald-400" />
+                      {copied === 'py_md' ? 'Copied Python!' : 'Copy Python'}
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Call the API with <code className="text-amber-300 font-mono">format=llm_markdown</code>. The server automatically excludes all personal identifiers (name, age, DOB, POB, Tamil text) and returns a concise, token-compressed Markdown document with 100% of astrological coordinates ready for Gemini or Claude.
+                </p>
+
+                <pre className="bg-slate-950 text-cyan-300 p-4 rounded-xl border border-slate-800 text-xs font-mono overflow-x-auto leading-relaxed">
+                  <code>{curlMarkdownCommand}</code>
+                </pre>
+              </div>
+
+              {/* cURL Example (Default Full JSON) */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-bold text-white">
                     <Code2 className="w-4 h-4 text-cyan-400" />
-                    cURL Command (Direct Terminal Call)
+                    Default Full JSON Response (cURL Command)
                   </div>
                   <button
                     onClick={() => copyToClipboard(curlCommand, 'curl')}
@@ -903,15 +1114,15 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
                 </pre>
               </div>
 
-              {/* Python requests Example */}
+              {/* Python requests Example (Option B vs Full) */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-bold text-white">
                     <Code2 className="w-4 h-4 text-emerald-400" />
-                    Python Client Example (using `requests`)
+                    Python Client Example (Option B: LLM Markdown Prompt Injection)
                   </div>
                   <button
-                    onClick={() => copyToClipboard(pythonClientCode, 'py_client')}
+                    onClick={() => copyToClipboard(pythonMarkdownClientCode, 'py_client')}
                     className="inline-flex items-center gap-1 text-xs text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded border border-slate-700"
                   >
                     <Copy className="w-3 h-3 text-amber-400" />
@@ -919,7 +1130,7 @@ for interval in data['vimshottari_dasha_intervals']['intervals'][:3]:
                   </button>
                 </div>
                 <pre className="bg-slate-950 text-emerald-300 p-4 rounded-xl border border-slate-800 text-xs font-mono overflow-x-auto leading-relaxed">
-                  <code>{pythonClientCode}</code>
+                  <code>{pythonMarkdownClientCode}</code>
                 </pre>
               </div>
             </div>

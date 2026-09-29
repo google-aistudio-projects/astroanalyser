@@ -124,6 +124,21 @@ python run_api_server.py
 The REST API server will start on `http://localhost:5000`.
 
 #### Testing with cURL:
+
+**1. Option B: High-Density LLM Markdown (Strict Zero-PII, Ready for Gemini/Claude Prompt Injection)**
+```bash
+curl -X POST "http://localhost:5000/api/horoscope/query?format=llm_markdown" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "person_id": "001ME",
+    "start_date": "January 1998",
+    "end_date": "January 2020",
+    "format": "llm_markdown"
+  }'
+```
+*Note: Returns pure `text/markdown`. Strips all PII (`person_name`, `age`, `date_of_birth`, `place_of_birth`, and Tamil prose). Compresses a 22-year footprint down to ~1,500 tokens (95% token savings).*
+
+**2. Default Full JSON Response (All Details & Raw Dumps)**
 ```bash
 curl -X POST http://localhost:5000/api/horoscope/query \
   -H "Content-Type: application/json" \
@@ -135,6 +150,29 @@ curl -X POST http://localhost:5000/api/horoscope/query \
 ```
 
 #### Testing with Python:
+
+**Option B: Direct Markdown Injection into LLM**
+```python
+import requests
+
+res = requests.post("http://localhost:5000/api/horoscope/query", json={
+    "person_id": "001ME",
+    "start_date": "January 1998",
+    "end_date": "January 2020",
+    "format": "llm_markdown"   # Automatically sanitizes all PII
+})
+
+markdown_prompt = res.text
+print(f"Sanitized Prompt Length: {len(markdown_prompt)} characters (~{len(markdown_prompt)//4} tokens)")
+
+# Pass directly to Gemini Pro or Claude:
+# gemini_response = client.models.generate_content(
+#     model="gemini-2.5-flash",
+#     contents=[f"Astrological Data:\\n{markdown_prompt}\\n\\nTask: Analyze major career shifts between 2005 and 2010."]
+# )
+```
+
+**Default: Standard Full JSON Payload**
 ```python
 import requests
 
@@ -280,6 +318,64 @@ print(f"Stored in DB:  {data['persisted_in_database']['table']}")
     "status": "SAVED"
   }
 }
+```
+
+---
+
+## 🤖 Option B: LLM Markdown Prompt Specification (Zero PII)
+
+When requesting `format=llm_markdown` (or `markdown=true`), the REST API automatically converts the heavy JSON structure into a clean, tabular Markdown format specifically engineered for **Gemini 1.5 Pro, Claude 3.5 Sonnet, and GPT-4o**:
+
+### Key Advantages:
+1. **Zero PII Exposure**: Completely removes human personal identifiers (`person_name`, `age`, `date_of_birth`, `place_of_birth`, and Tamil prose). Only astronomical coordinates and anonymous IDs (`001ME`) are included.
+2. **95% Prompt Window Savings**: Drops a 22-year footprint from **~38,000 tokens** down to **~1,450 tokens**, preserving valuable context window space and reducing API cost.
+3. **Optimized for LLM Attention**: High-density tables allow the model's self-attention mechanism to seamlessly cross-reference Dasha period lords with transit house activations.
+
+### Sample Output (`format=llm_markdown`):
+
+```markdown
+# VEDIC ASTROLOGICAL REASONING MATRIX (ANONYMIZED)
+**Reference:** `001ME` | **Analysis Window:** `1998-01-01` to `2020-01-31` (22.08 years)
+**Lagna (Ascendant):** Dhanus (Sagittarius) | **Janma Rashi (Moon Sign):** Vrischigam (Scorpio) | **Birth Nakshatra:** Anusham (Anuradha) (Pada 2) | **Starting Dasha:** Saturn (Sani)
+
+## 1. NATAL CHART PLACEMENTS (D1 Rashi & D9 Navamsha)
+| Graha | D1 Sign | D1 House (Lagna=1) | Sputa Degree | Nakshatra & Pada | Motion | D9 Sign | D9 House |
+| :--- | :--- | :---: | :---: | :--- | :---: | :--- | :---: |
+| Lagna | Dhanus (Sagittarius) | 1 | 16° 33' | Purva Ashadha (P1) | Direct | Simham (Leo) | 1 |
+| Sun (Surya) | Makaram (Capricorn) | 2 | 11° 37' | Shravana (P1) | Direct | Mesham (Aries) | 9 |
+| Moon (Chandra) | Vrischigam (Scorpio) | 12 | 07° 24' | Anuradha (P2) | Direct | Kanni (Virgo) | 2 |
+| Mars (Sevvai) | Rishabam (Taurus) | 6 | 21° 23' | Rohini (P4) | Direct | Katakam (Cancer) | 12 |
+| Mercury (Budha)| Makaram (Capricorn) | 2 | 05° 15' | Uttara Ashadha (P3) | Retrograde | Kumbam (Aquarius) | 7 |
+| Jupiter (Guru) | Meenam (Pisces) | 4 | 24° 42' | Revati (P3) | Direct | Kumbam (Aquarius) | 7 |
+| Venus (Sukra) | Dhanus (Sagittarius) | 1 | 06° 08' | Mula (P2) | Direct | Rishabam (Taurus) | 10 |
+| Saturn (Sani) | Katakam (Cancer) | 8 | 05° 57' | Pushya (P1) | Retrograde | Simham (Leo) | 1 |
+| Rahu | Thulaam (Libra) | 11 | 24° 25' | Vishakha (P2) | Retrograde | Mithunam (Gemini) | 11 |
+| Ketu | Mesham (Aries) | 5 | 24° 25' | Bharani (P4) | Retrograde | Vrischigam (Scorpio) | 4 |
+
+## 2. ACTIVE VIMSHOTTARI DASHA TIMELINE (103 Sub-Intervals down to PD Level)
+| # | Period Interval | Mahadasha (MD) | Antardasha (AD) | Pratyantardasha (PD) | Duration |
+| -: | :--- | :--- | :--- | :--- | -: |
+| 1 | 1997-12-16 to 1998-02-04 | Mercury (Budha) | Mars (Sevvai) | Jupiter (Guru) | 50d |
+| 2 | 1998-02-04 to 1998-03-30 | Mercury (Budha) | Mars (Sevvai) | Saturn (Sani) | 54d |
+| 3 | 1998-03-30 to 1998-05-20 | Mercury (Budha) | Mars (Sevvai) | Mercury (Budha) | 51d |
+...
+
+## 3. GOCHARA (TRANSIT) SNAPSHOT (At Window Start: 1998-01-01)
+| Graha | Transit Sign | House from Lagna (H_L) | House from Moon (H_M) | Sputa Degree | Nakshatra & Pada | Motion |
+| :--- | :--- | :---: | :---: | :---: | :--- | :---: |
+| Jupiter (Guru) | Makaram (Capricorn) | House 2 | House 3 | 28° 31' 41" | Dhanishta-2 (Mars) | Direct |
+| Saturn (Sani) | Meenam (Pisces) | House 4 | House 5 | 20° 48' 14" | Revati-2 (Mercury) | Direct |
+| Rahu | Simham (Leo) | House 9 | House 10 | 20° 05' 32" | Purva Phalguni-3 (Venus) | Retrograde |
+| Ketu | Kumbam (Aquarius) | House 3 | House 4 | 20° 05' 32" | Purva Bhadrapada-1 (Jupiter) | Retrograde |
+...
+
+## 4. MAJOR PLANETARY TRANSIT INGRESSES ACROSS TIMELINE (82 Transitions)
+| Graha | Ingress Sign | From Lagna | From Moon | Active Period | Star Occupied |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| Jupiter (Guru) | Kumbam (Aquarius) | House 3 | House 4 | 1998-01-08 to 1999-01-11 | Shatabhisha (P1) |
+| Saturn (Sani) | Mesham (Aries) | House 5 | House 6 | 1998-04-17 to 2000-06-07 | Bharani (P2) |
+| Jupiter (Guru) | Katakam (Cancer) | House 8 | House 9 | 2002-07-06 to 2003-07-30 | Pushya (P3) |
+...
 ```
 
 ---

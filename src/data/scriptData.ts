@@ -253,6 +253,18 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length).decode()) if length else {}
             res = query_horoscope_and_timeline(load_config(), body.get("person_id", "001ME"), body.get("start_date", "1998-01-01"), body.get("end_date", "2020-01-31"))
+            
+            # Check for Option B LLM Markdown format request (Zero PII)
+            is_md = body.get("format") in ["markdown", "llm_markdown"] or body.get("markdown") is True
+            if is_md and "error" not in res:
+                md_text = build_llm_markdown_prompt(res)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/markdown; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(md_text.encode("utf-8"))
+                return
+
             self.send_response(200 if "error" not in res else 404)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -264,7 +276,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 5000
-    print(f"Serving Vedic Horoscope REST API (One-Punch Natal + Transit) on port {port}...")
+    print(f"Serving Vedic Horoscope REST API (One-Punch Natal + Transit + LLM Markdown) on port {port}...")
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()
 `;
 

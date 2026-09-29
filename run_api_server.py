@@ -429,6 +429,119 @@ def query_horoscope_and_timeline(cfg: Dict[str, Any], person_id: str, start_date
     return get_fallback_data(person_id, norm_start, norm_end)
 
 
+def build_llm_markdown_prompt(payload: Dict[str, Any]) -> str:
+    """
+    Transforms the full unified response into Option B: High-Density Markdown
+    specifically sanitized for LLM prompt ingestion.
+    STRICT SANITIZATION:
+      - Strips person_name, age, date_of_birth, place_of_birth
+      - Strips Tamil dasha balance text and verbose prose
+      - Condenses D1 & D9 natal charts into a unified matrix
+      - Preserves every sequential PD interval and dual-relative transit positions
+    """
+    profile = payload.get("person_profile", {})
+    ref_id = payload.get("person_id", "ANON_NATIVE")
+    timeline = payload.get("requested_timeline", {})
+    start_d = timeline.get("start_date", "")
+    end_d = timeline.get("end_date", "")
+    span_yrs = timeline.get("span_years", "")
+
+    # Native Astrological Baseline (NO PII)
+    lagna = profile.get("birth_lagna", "Dhanus (Sagittarius)")
+    rashi = profile.get("birth_rashi", "Vrischigam (Scorpio)")
+    star = profile.get("birth_star", "Anusham (Anuradha)")
+    pada = profile.get("birth_star_pada", 2)
+    start_lord = profile.get("starting_dasha_lord", "Saturn (Sani)")
+
+    md_lines = []
+    md_lines.append("# VEDIC ASTROLOGICAL REASONING MATRIX (ANONYMIZED)")
+    md_lines.append(f"**Reference:** `{ref_id}` | **Analysis Window:** `{start_d}` to `{end_d}` ({span_yrs} years)")
+    md_lines.append(f"**Lagna (Ascendant):** {lagna} | **Janma Rashi (Moon Sign):** {rashi} | **Birth Nakshatra:** {star} (Pada {pada}) | **Starting Dasha:** {start_lord}")
+    md_lines.append("")
+
+    # 1. Combined Natal Placements (D1 Rashi & D9 Navamsha)
+    d1_list = payload.get("natal_placements", {}).get("D1_rashi_chart", {}).get("bodies", [])
+    d9_list = payload.get("natal_placements", {}).get("D9_navamsha_chart", {}).get("bodies", [])
+    d9_map = {b.get("body_name"): b for b in d9_list}
+
+    md_lines.append("## 1. NATAL CHART PLACEMENTS (D1 Rashi & D9 Navamsha)")
+    md_lines.append("| Graha | D1 Sign | D1 House (Lagna=1) | Sputa Degree | Nakshatra & Pada | Motion | D9 Sign | D9 House |")
+    md_lines.append("| :--- | :--- | :---: | :---: | :--- | :---: | :--- | :---: |")
+
+    for p in d1_list:
+        b_name = p.get("body_name", "")
+        d1_sign = p.get("rashi_name", "")
+        d1_house = p.get("house_number", "")
+        deg = p.get("degree_sputa", "-")
+        nak = p.get("nakshatra_name", "")
+        pada_val = p.get("pada")
+        nak_pada = f"{nak} (P{pada_val})" if nak else "-"
+        motion = "Retrograde" if p.get("is_retrograde") else "Direct"
+        d9_match = d9_map.get(b_name, {})
+        d9_sign = d9_match.get("rashi_name", "-")
+        d9_house = d9_match.get("house_number", "-")
+        md_lines.append(f"| {b_name} | {d1_sign} | {d1_house} | {deg} | {nak_pada} | {motion} | {d9_sign} | {d9_house} |")
+
+    md_lines.append("")
+
+    # 2. Vimshottari Dasha Intervals (MD > AD > PD)
+    dashas = payload.get("vimshottari_dasha_intervals", {}).get("intervals", [])
+    md_lines.append(f"## 2. ACTIVE VIMSHOTTARI DASHA TIMELINE ({len(dashas)} Sub-Intervals down to PD Level)")
+    md_lines.append("| # | Period Interval | Mahadasha (MD) | Antardasha (AD) | Pratyantardasha (PD) | Duration |")
+    md_lines.append("| -: | :--- | :--- | :--- | :--- | -: |")
+    for d in dashas:
+        seq = d.get("sequence_index", "")
+        s = d.get("start_date", "")
+        e = d.get("end_date", "")
+        md = d.get("mahadasha_lord_md", "")
+        ad = d.get("antardasha_lord_ad", "")
+        pd = d.get("pratyantardasha_lord_pd", "")
+        dur = f"{d.get('duration_days', '')}d" if d.get('duration_days') else "-"
+        md_lines.append(f"| {seq} | {s} to {e} | {md} | {ad} | {pd} | {dur} |")
+
+    md_lines.append("")
+
+    # 3. Transit Gochara Snapshot
+    transits = payload.get("transit_ephemeris_timeline", {})
+    if transits:
+        snap_start = transits.get("transit_snapshot_start", [])
+        if snap_start:
+            md_lines.append(f"## 3. GOCHARA (TRANSIT) SNAPSHOT (At Window Start: {start_d})")
+            md_lines.append("| Graha | Transit Sign | House from Lagna (H_L) | House from Moon (H_M) | Sputa Degree | Nakshatra & Pada | Motion |")
+            md_lines.append("| :--- | :--- | :---: | :---: | :---: | :--- | :---: |")
+            for g in snap_start:
+                g_name = g.get("graha_name", "")
+                sign = g.get("transit_rashi_name", "")
+                h_l = g.get("relative_to_natal_lagna", {}).get("house_number", "")
+                h_m = g.get("relative_to_natal_rashi", {}).get("house_number", "")
+                deg = g.get("degree_sputa", "-")
+                chara = g.get("graha_pada_chara", {}).get("chara_summary", "-")
+                motion = "Retrograde" if g.get("is_retrograde") else "Direct"
+                md_lines.append(f"| {g_name} | {sign} | House {h_l} | House {h_m} | {deg} | {chara} | {motion} |")
+            md_lines.append("")
+
+        # 4. Major Ingresses & Sign Transitions
+        ingresses = transits.get("major_transits_timeline", [])
+        if ingresses:
+            md_lines.append(f"## 4. MAJOR TRANSIT SIGN INGRESSES ACROSS TIMELINE ({len(ingresses)} Events)")
+            md_lines.append("| Graha | Ingress Sign | From Lagna | From Moon | Active Period | Star Occupied |")
+            md_lines.append("| :--- | :--- | :---: | :---: | :--- | :--- |")
+            for ev in ingresses:
+                g_name = ev.get("graha_name", "")
+                sign = ev.get("transit_rashi_name", "")
+                h_l = f"House {ev.get('house_from_natal_lagna', '')}"
+                h_m = f"House {ev.get('house_from_natal_rashi', '')}"
+                period = f"{ev.get('start_date', '')} to {ev.get('end_date', '')}"
+                star_p = f"{ev.get('nakshatra_name', '')} (P{ev.get('pada', '')})"
+                md_lines.append(f"| {g_name} | {sign} | {h_l} | {h_m} | {period} | {star_p} |")
+            md_lines.append("")
+
+    md_lines.append("---")
+    md_lines.append("*(Astrological inference instructions: Analyze active MD/AD/PD lords, examine their natal house rulerships from Lagna and Janma Rashi, and cross-reference with contemporaneous Gochara transits.)*")
+
+    return "\n".join(md_lines)
+
+
 def query_transit_only(cfg: Dict[str, Any], person_id: str, start_date_str: str, end_date_str: str) -> Dict[str, Any]:
     """
     Dedicated Transit Ephemeris query for the 9 Grahas across the requested timeline.
@@ -545,9 +658,18 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             person_id = params.get("person_id", ["001ME"])[0]
             start_date = params.get("start_date", ["1998-01-01"])[0]
             end_date = params.get("end_date", ["2020-01-31"])[0]
+            format_opt = params.get("format", ["full"])[0].lower()
+            is_markdown = format_opt in ["markdown", "llm_markdown"] or "markdown" in params
 
             result = query_horoscope_and_timeline(cfg, person_id, start_date, end_date)
             status = 200 if "error" not in result else 404
+
+            if is_markdown and "error" not in result:
+                md_text = build_llm_markdown_prompt(result)
+                self._set_headers(200, content_type="text/markdown; charset=utf-8")
+                self.wfile.write(md_text.encode("utf-8"))
+                return
+
             self._set_headers(status)
             self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
             return
@@ -583,9 +705,18 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             person_id = data.get("person_id", "001ME")
             start_date = data.get("start_date", "1998-01-01")
             end_date = data.get("end_date", "2020-01-31")
+            format_opt = (data.get("format") or "").lower()
+            is_markdown = format_opt in ["markdown", "llm_markdown"] or data.get("markdown") is True
 
             result = query_horoscope_and_timeline(cfg, person_id, start_date, end_date)
             status = 200 if "error" not in result else 404
+
+            if is_markdown and "error" not in result:
+                md_text = build_llm_markdown_prompt(result)
+                self._set_headers(200, content_type="text/markdown; charset=utf-8")
+                self.wfile.write(md_text.encode("utf-8"))
+                return
+
             self._set_headers(status)
             self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
             return

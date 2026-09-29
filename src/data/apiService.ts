@@ -404,3 +404,90 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
     }
   };
 }
+
+/**
+ * Transforms any HoroscopeApiResponse into Option B: High-Density LLM Markdown
+ * with STRICT PII SANITIZATION (zero human personal details, zero Tamil text noise).
+ */
+export function generateLlmMarkdown(res: HoroscopeApiResponse): string {
+  const profile = res.person_profile;
+  const startD = res.requested_timeline.start_date;
+  const endD = res.requested_timeline.end_date;
+  const spanYrs = res.requested_timeline.span_years ?? '-';
+
+  const lines: string[] = [];
+
+  lines.push('# VEDIC ASTROLOGICAL REASONING MATRIX (ANONYMIZED)');
+  lines.push(`**Reference ID:** \`${res.person_id}\` | **Analysis Window:** \`${startD}\` to \`${endD}\` (${spanYrs} years)`);
+  lines.push(`**Lagna (Ascendant):** ${profile.birth_lagna} | **Janma Rashi (Moon Sign):** ${profile.birth_rashi} | **Birth Nakshatra:** ${profile.birth_star} (Pada ${profile.birth_star_pada}) | **Starting Dasha:** ${profile.starting_dasha_lord}`);
+  lines.push('');
+
+  // 1. Combined Natal Placements (D1 & D9)
+  const d1 = res.natal_placements.D1_rashi_chart.bodies;
+  const d9 = res.natal_placements.D9_navamsha_chart.bodies;
+  const d9Map = new Map(d9.map(b => [b.body_name, b]));
+
+  lines.push('## 1. NATAL CHART PLACEMENTS (D1 Rashi & D9 Navamsha)');
+  lines.push('| Graha | D1 Sign | D1 House (Lagna=1) | Sputa Degree | Nakshatra & Pada | Motion | D9 Sign | D9 House |');
+  lines.push('| :--- | :--- | :---: | :---: | :--- | :---: | :--- | :---: |');
+
+  for (const p of d1) {
+    const d9Match = d9Map.get(p.body_name);
+    const nakPada = p.nakshatra_name ? `${p.nakshatra_name} (P${p.pada ?? 1})` : '-';
+    const motion = p.is_retrograde ? 'Retrograde' : 'Direct';
+    const d9Sign = d9Match?.rashi_name ?? '-';
+    const d9House = d9Match?.house_number ?? '-';
+    lines.push(`| ${p.body_name} | ${p.rashi_name} | ${p.house_number} | ${p.degree_sputa || '-'} | ${nakPada} | ${motion} | ${d9Sign} | ${d9House} |`);
+  }
+  lines.push('');
+
+  // 2. Active Vimshottari Dasha Timeline (MD > AD > PD)
+  const intervals = res.vimshottari_dasha_intervals.intervals;
+  lines.push(`## 2. ACTIVE VIMSHOTTARI DASHA TIMELINE (${intervals.length} Sequential Periods at PD Level)`);
+  lines.push('| # | Period Interval | Mahadasha (MD) | Antardasha (AD) | Pratyantardasha (PD) | Duration |');
+  lines.push('| -: | :--- | :--- | :--- | :--- | -: |');
+  for (const it of intervals) {
+    const dur = it.duration_days ? `${it.duration_days}d` : '-';
+    lines.push(`| ${it.sequence_index} | ${it.start_date} to ${it.end_date} | ${it.mahadasha_lord_md} | ${it.antardasha_lord_ad} | ${it.pratyantardasha_lord_pd} | ${dur} |`);
+  }
+  lines.push('');
+
+  // 3. Gochara (Transit) Snapshot
+  if (res.transit_ephemeris_timeline) {
+    const snap = res.transit_ephemeris_timeline.transit_snapshot_start;
+    if (snap && snap.length > 0) {
+      lines.push(`## 3. GOCHARA (TRANSIT) SNAPSHOT (At Window Start: ${startD})`);
+      lines.push('| Graha | Transit Sign | House from Lagna (H_L) | House from Moon (H_M) | Sputa Degree | Nakshatra & Pada | Motion |');
+      lines.push('| :--- | :--- | :---: | :---: | :---: | :--- | :---: |');
+      for (const g of snap) {
+        const motion = g.is_retrograde ? 'Retrograde' : 'Direct';
+        lines.push(`| ${g.graha_name} | ${g.transit_rashi_name} | House ${g.relative_to_natal_lagna.house_number} | House ${g.relative_to_natal_rashi.house_number} | ${g.degree_sputa} | ${g.graha_pada_chara.chara_summary} | ${motion} |`);
+      }
+      lines.push('');
+    }
+
+    // 4. Major Transit Sign Ingresses
+    const ingresses = res.transit_ephemeris_timeline.major_transits_timeline;
+    if (ingresses && ingresses.length > 0) {
+      // If long timeline, focus on major slow planets (Jupiter, Saturn, Rahu, Ketu)
+      const majorPlanets = new Set(['Jupiter', 'Saturn', 'Rahu', 'Ketu', 'Jupiter (Guru)', 'Saturn (Sani)']);
+      const filtered = (res.requested_timeline.span_years || 0) > 3
+        ? ingresses.filter(ev => Array.from(majorPlanets).some(p => ev.graha_name.includes(p)))
+        : ingresses;
+
+      lines.push(`## 4. MAJOR PLANETARY TRANSIT INGRESSES ACROSS TIMELINE (${filtered.length} Transitions)`);
+      lines.push('| Graha | Ingress Sign | From Lagna | From Moon | Active Period | Star Occupied |');
+      lines.push('| :--- | :--- | :---: | :---: | :--- | :--- |');
+      for (const ev of filtered) {
+        lines.push(`| ${ev.graha_name} | ${ev.transit_rashi_name} | House ${ev.house_from_natal_lagna} | House ${ev.house_from_natal_rashi} | ${ev.start_date} to ${ev.end_date} | ${ev.nakshatra_name} (P${ev.pada}) |`);
+      }
+      lines.push('');
+    }
+  }
+
+  lines.push('---');
+  lines.push('*(Astrological inference instructions: Analyze active MD/AD/PD lords, examine their natal house rulerships from Lagna and Janma Rashi, and cross-reference with contemporaneous Gochara transits.)*');
+
+  return lines.join('\n');
+}
+
