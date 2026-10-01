@@ -560,13 +560,13 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
             Select any planet badge (e.g. <strong>Saturn</strong>, <strong>Jupiter</strong>, or <strong>Mars</strong>) to raycast and highlight its aspected houses (Graha Drishti).
           </span>
           <div className="flex items-center gap-2.5 text-[11px]">
-            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              Solid = Natal
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+              Grey = Natal Birth (Fixed / Non-changeable)
             </span>
-            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">
-              <span className="w-2 h-2 rounded-full bg-cyan-400/60" />
-              Cyan = {MONTH_NAMES[selectedMonth]} {selectedYear} Transit
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/40 text-amber-300 font-medium">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              Yellow [Tr] = Gochara Transit ({MONTH_NAMES[selectedMonth]} {selectedYear})
             </span>
           </div>
         </div>
@@ -583,36 +583,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                   return (
                     <div
                       key={`center-${rowIdx}-${colIdx}`}
-                      className="col-span-2 row-span-2 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-5 text-center shadow-inner relative overflow-hidden"
-                    >
-                      <div
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 shadow-inner mb-2"
-                        title="Lord Muruga's Sacred Vel (Spear)"
-                      >
-                        <span className="text-amber-400 font-bold text-2xl leading-none">ௐ</span>
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="w-6 h-6 text-amber-400 fill-current drop-shadow"
-                        >
-                          <path d="M12 2 C10 6 7 9 7 13 C7 15.5 9 17 11 17.5 L11 22 L13 22 L13 17.5 C15 17 17 15.5 17 13 C17 9 14 6 12 2 Z M12 5 C13 7.5 14.5 10 14.5 13 C14.5 14.5 13.5 15.5 12 15.8 C10.5 15.5 9.5 14.5 9.5 13 C9.5 10 11 7.5 12 5 Z" />
-                        </svg>
-                      </div>
-                      <div className="text-base sm:text-lg font-bold text-white tracking-tight">
-                        D1 இராசி சக்கரம்
-                      </div>
-                      <div className="text-xs font-semibold text-amber-400 mt-0.5">
-                        {MONTH_NAMES[selectedMonth]} {selectedYear} Transit Window
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-2 max-w-xs leading-relaxed">
-                        Lagna: <strong className="text-cyan-400">தனுசு (Sagittarius)</strong> = House 1 &bull; Clockwise 1 to 12
-                      </div>
-
-                      {/* Active PD Lord Focus pill */}
-                      <div className="mt-3 flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-amber-500/30 text-[11px] text-slate-300">
-                        <Zap className="w-3.5 h-3.5 text-amber-400" />
-                        <span>PD Lord: <strong className="text-amber-300">{activeDashaHierarchy.pratyantardasha}</strong></span>
-                      </div>
-                    </div>
+                      className="col-span-2 row-span-2 bg-slate-950/60 border border-slate-800/80 rounded-xl shadow-inner"
+                    />
                   );
                 }
                 return null;
@@ -743,7 +715,7 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
 
                   {/* DUAL LAYER PLANETARY BADGES */}
                   <div className="my-auto py-1 space-y-1 overflow-y-auto max-h-[140px] pr-0.5">
-                    {/* BASE LAYER: NATAL BIRTH PLANETS */}
+                    {/* BASE LAYER: NATAL BIRTH PLANETS (GREYED OUT AS PERMANENT / UNCHANGEABLE, DRISHTI ENABLED) */}
                     {natalOccupants.map(natalP => {
                       const isSelected =
                         activeRaycast?.layer === 'natal' &&
@@ -756,20 +728,20 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                           onClick={e =>
                             handlePlanetClick(e, natalP.body_name, signDef.index, signDef.eng, 'natal')
                           }
-                          className={`w-full text-left text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded flex items-center justify-between transition group ${
+                          className={`w-full text-left text-[10px] sm:text-[11px] font-medium px-1.5 py-0.5 rounded flex items-center justify-between transition group ${
                             isSelected
-                              ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                              ? 'bg-slate-200 text-slate-950 font-bold ring-2 ring-slate-100 shadow-md'
                               : natalP.body_name === 'Lagna'
-                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30'
-                              : 'bg-slate-800 text-amber-300 border border-amber-500/30 hover:bg-amber-500/10 hover:border-amber-400'
+                              ? 'bg-slate-800 text-slate-200 border border-slate-600/90 hover:bg-slate-700 hover:text-white'
+                              : 'bg-slate-800/70 text-slate-300 border border-slate-700/70 hover:bg-slate-700/60 hover:text-white hover:border-slate-500'
                           }`}
-                          title={`Natal ${natalP.body_name} in ${signDef.eng} (Click to raycast Graha Drishti)`}
+                          title={`Natal ${natalP.body_name} in ${signDef.eng} (Fixed Birth Placement - Click to raycast Graha Drishti)`}
                         >
                           <span className="flex items-center gap-1 truncate">
-                            <span className="text-[10px] text-amber-400">●</span>
-                            <span>{natalP.body_name}</span>
+                            <span className="text-[10px] text-slate-400 group-hover:text-slate-200">●</span>
+                            <span className="truncate">{natalP.body_name}</span>
                           </span>
-                          <span className="text-[9px] opacity-80 font-mono ml-1">
+                          <span className="text-[9px] opacity-75 font-mono ml-1 text-slate-400">
                             {natalP.is_retrograde && (
                               <span className="text-rose-400 mr-1" title="Retrograde">
                                 (R)
@@ -781,7 +753,7 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                       );
                     })}
 
-                    {/* OVERLAY LAYER: TRANSITING PLANETS (GOCHARA) FOR SELECTED MONTH */}
+                    {/* OVERLAY LAYER: TRANSITING PLANETS (GOCHARA) - COLOR CODED IN YELLOW */}
                     {currentTransitsInSign.map(transitP => {
                       const isSelected =
                         activeRaycast?.layer === 'transit' &&
@@ -794,20 +766,20 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                           onClick={e =>
                             handlePlanetClick(e, transitP.graha_key, signDef.index, signDef.eng, 'transit')
                           }
-                          className={`w-full text-left text-[10px] sm:text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center justify-between transition ${
+                          className={`w-full text-left text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded flex items-center justify-between transition ${
                             isSelected
-                              ? 'bg-cyan-400 text-slate-950 font-bold ring-2 ring-cyan-300'
-                              : 'bg-cyan-950/40 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-900/40 hover:border-cyan-400'
+                              ? 'bg-amber-400 text-slate-950 font-extrabold ring-2 ring-amber-300 shadow-md'
+                              : 'bg-amber-950/30 text-amber-300 border border-amber-500/40 hover:bg-amber-900/40 hover:border-amber-400'
                           }`}
                           title={`[Tr] Transit ${transitP.graha_name} at ${transitP.degree_sputa} (Click to raycast Graha Drishti)`}
                         >
                           <span className="flex items-center gap-1 truncate">
-                            <span className="text-[9px] px-1 rounded bg-cyan-500/20 text-cyan-200 font-mono">
+                            <span className="text-[9px] px-1 rounded bg-amber-500/25 text-amber-300 font-mono font-bold">
                               Tr
                             </span>
                             <span className="truncate">{transitP.graha_key}</span>
                           </span>
-                          <span className="text-[9px] font-mono text-cyan-200/90 ml-1">
+                          <span className="text-[9px] font-mono text-amber-300/90 ml-1">
                             {transitP.is_retrograde && (
                               <span className="text-rose-400 mr-1" title="Retrograde (வக்ரம்)">
                                 (R)
