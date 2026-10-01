@@ -342,48 +342,6 @@ print(prompt_markdown[:400])
 
   return (
     <div className="space-y-6">
-      {/* Top Banner explaining Model 2 */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/30 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-400 tracking-wider uppercase mb-1">
-              <Server className="w-4 h-4" />
-              Model 2: Production REST API Query Engine
-            </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              Horoscope Timeline &amp; Natal Placement REST API
-            </h2>
-            <p className="text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Accepts <code className="text-amber-400 font-mono">person_id</code> and any requested timeline span
-              (e.g., <em>January 1998 to January 2020</em>). Generates a standardized JSON response containing
-              D1 &amp; D9 relative house placements, full granular Pratyantardasha (MD &gt; AD &gt; PD) intervals,
-              a unique cycling 1..100 running number, and automatically audits the query into the PostgreSQL
-              <code className="text-emerald-400 font-mono"> user_queries</code> transaction table.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2.5">
-            <div className="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl text-center">
-              <div className="text-xs text-slate-400 font-medium">API Server</div>
-              <div className="text-sm font-bold text-emerald-400 font-mono">port 5000</div>
-            </div>
-            <div className="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl text-center">
-              <div className="text-xs text-slate-400 font-medium">Running Number</div>
-              <div className="text-sm font-bold text-amber-400 font-mono">1 to 100 Cycle</div>
-            </div>
-            <div className="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl text-center">
-              <div className="text-xs text-slate-400 font-medium">Granularity</div>
-              <div className="text-sm font-bold text-cyan-400">PD (Anthara) Level</div>
-            </div>
-            <div className="bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl text-center">
-              <div className="text-xs text-slate-400 font-medium">Audit Table</div>
-              <div className="text-sm font-bold text-purple-400 font-mono">user_queries</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Query Parameters Form */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">

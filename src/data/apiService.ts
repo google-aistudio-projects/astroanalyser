@@ -349,6 +349,44 @@ export function normalizeDateString(inputVal: string, defaultToEndOfMonth: boole
   return inputVal;
 }
 
+// Ingested Persons In-Memory Registry (persists parsed PDFs for REST API and Charts)
+export const ingestedPersonsRegistry: Record<string, {
+  profile: PersonMaster;
+  placements: NatalPlacement[];
+  dashaRecords?: [string, string, string, string, string][];
+}> = {
+  '001ME': {
+    profile: samplePersonMaster,
+    placements: sampleNatalPlacements,
+    dashaRecords: ALL_DASHA_TIMELINE
+  }
+};
+
+export function registerIngestedPerson(
+  personId: string,
+  profile: PersonMaster,
+  placements: NatalPlacement[],
+  dashaRecords?: [string, string, string, string, string][]
+) {
+  ingestedPersonsRegistry[personId] = {
+    profile,
+    placements,
+    dashaRecords: dashaRecords || ALL_DASHA_TIMELINE
+  };
+}
+
+export function getRegisteredPersonList(): { id: string; name: string; lagna: string; rashi: string }[] {
+  return Object.keys(ingestedPersonsRegistry).map(pid => {
+    const p = ingestedPersonsRegistry[pid].profile;
+    return {
+      id: pid,
+      name: p.person_name,
+      lagna: p.birth_lagna,
+      rashi: p.birth_rashi
+    };
+  });
+}
+
 export function executeHoroscopeTimelineQuery(personId: string, startDateStr: string, endDateStr: string): HoroscopeApiResponse {
   const normStart = normalizeDateString(startDateStr, false);
   const normEnd = normalizeDateString(endDateStr, true);
@@ -360,8 +398,14 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
   const timestampStr = now.toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
   const uniqueResponseId = `Q-${personId}-${String(runningNum).padStart(3, '0')}-${timestampStr}`;
 
+  // Resolve person from ingested registry or fallback to 001ME
+  const registered = ingestedPersonsRegistry[personId] || ingestedPersonsRegistry['001ME'];
+  const personProfile = registered.profile;
+  const natalPlacementsList = registered.placements;
+  const dashaSource = registered.dashaRecords || ALL_DASHA_TIMELINE;
+
   // Filter overlapping periods: (start_date <= requested_end) AND (end_date >= requested_start)
-  const filtered = ALL_DASHA_TIMELINE.filter(([_, __, ___, s, e]) => s <= normEnd && e >= normStart);
+  const filtered = dashaSource.filter(([_, __, ___, s, e]) => s <= normEnd && e >= normStart);
 
   const intervals: DashaIntervalItem[] = filtered.map(([md, ad, pd, s, e], idx) => {
     let days: number | null = null;
@@ -390,8 +434,24 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
     spanYears = parseFloat(((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(2));
   } catch {}
 
-  const d1Bodies = sampleNatalPlacements.filter(p => p.chart_type === 'D1');
-  const d9Bodies = sampleNatalPlacements.filter(p => p.chart_type === 'D9');
+  const d1Bodies = natalPlacementsList.filter(p => p.chart_type === 'D1');
+  const d9Bodies = natalPlacementsList.filter(p => p.chart_type === 'D9');
+
+  // Determine lagna sign index (0 to 11) for transit calculations
+  const lagnaMatch = personProfile.birth_lagna.toLowerCase();
+  const rashiMatch = personProfile.birth_rashi.toLowerCase();
+  
+  const signKeys = [
+    'mesham', 'rishabham', 'mithunam', 'katakam', 'simham', 'kanni',
+    'thulaam', 'vrischigam', 'dhanus', 'makaram', 'kumbham', 'meenam'
+  ];
+  let lagnaIdx = 9; // Dhanus default (1-based = 9)
+  let rashiIdx = 8; // Vrischigam default (1-based = 8)
+
+  signKeys.forEach((s, i) => {
+    if (lagnaMatch.includes(s) || lagnaMatch.includes(s.slice(0, 4))) lagnaIdx = i + 1;
+    if (rashiMatch.includes(s) || rashiMatch.includes(s.slice(0, 4))) rashiIdx = i + 1;
+  });
 
   return {
     unique_response_id: uniqueResponseId,
@@ -402,11 +462,11 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
       end_date: normEnd,
       span_years: spanYears
     },
-    person_profile: samplePersonMaster,
+    person_profile: personProfile,
     natal_placements: {
       D1_rashi_chart: {
         count: d1Bodies.length,
-        lagna_sign: samplePersonMaster.birth_lagna,
+        lagna_sign: personProfile.birth_lagna,
         bodies: d1Bodies
       },
       D9_navamsha_chart: {
@@ -419,7 +479,7 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
       granularity: "Pratyantardasha (PD) Level",
       intervals
     },
-    transit_ephemeris_timeline: generateClientTransitTimeline(normStart, normEnd, 9, 8),
+    transit_ephemeris_timeline: generateClientTransitTimeline(normStart, normEnd, lagnaIdx, rashiIdx),
     server_timestamp: now.toISOString(),
     persisted_in_database: {
       table: "user_queries",
