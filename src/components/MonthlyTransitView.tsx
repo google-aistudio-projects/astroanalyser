@@ -19,7 +19,24 @@ import {
 } from 'lucide-react';
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
-import { ALL_DASHA_TIMELINE } from '../data/apiService';
+import { getVimshottariDashaForDate, DynamicDashaHierarchy } from '../data/dashaCalculator';
+
+/**
+ * Maps a Planet / Lord to its traditional sign indices (1 = Aries .. 12 = Pisces)
+ */
+export function getLordOwnedSigns(lordName: string): number[] {
+  const norm = lordName.toLowerCase();
+  if (norm.includes('sun') || norm.includes('surya')) return [5]; // Leo
+  if (norm.includes('moon') || norm.includes('chandra')) return [4]; // Cancer
+  if (norm.includes('mars') || norm.includes('sevvai')) return [1, 8]; // Aries, Scorpio
+  if (norm.includes('mercury') || norm.includes('budha')) return [3, 6]; // Gemini, Virgo
+  if (norm.includes('jupiter') || norm.includes('guru')) return [9, 12]; // Sagittarius, Pisces
+  if (norm.includes('venus') || norm.includes('sukra')) return [2, 7]; // Taurus, Libra
+  if (norm.includes('saturn') || norm.includes('sani')) return [10, 11]; // Capricorn, Aquarius
+  if (norm.includes('rahu')) return [11]; // Co-rules Aquarius
+  if (norm.includes('ketu')) return [8]; // Co-rules Scorpio
+  return [];
+}
 
 /**
  * 12 Signs Metadata with Fixed South Indian Grid Coordinates & Zodiac Iconography
@@ -167,32 +184,15 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     return grahaKeys.map(k => getGrahaTransitPosition(k, activeDate, natalLagnaIdx, natalRashiIdx));
   }, [activeDate, natalLagnaIdx, natalRashiIdx]);
 
-  // Resolve Active Vimshottari Dasha Hierarchy for Selected Date
+  // Resolve Active Vimshottari Dasha Hierarchy for Selected Date dynamically
   const activeDashaHierarchy = useMemo(() => {
-    const dateStr = activeDateIsoStr;
-    const match = ALL_DASHA_TIMELINE.find(([md, ad, pd, start, end]) => {
-      return dateStr >= start && dateStr <= end;
-    });
-
-    if (match) {
-      return {
-        mahadasha: match[0],
-        antardasha: match[1],
-        pratyantardasha: match[2],
-        startDate: match[3],
-        endDate: match[4]
-      };
-    }
-
-    // Fallback if outside range
-    return {
-      mahadasha: 'Venus (Sukra)',
-      antardasha: 'Saturn (Sani)',
-      pratyantardasha: 'Mercury (Budha)',
-      startDate: '2026-08-03',
-      endDate: '2027-01-14'
-    };
+    return getVimshottariDashaForDate(activeDateIsoStr);
   }, [activeDateIsoStr]);
+
+  // Houses ruled or occupied by the active PD Lord
+  const pdLordOwnedSigns = useMemo(() => {
+    return getLordOwnedSigns(activeDashaHierarchy.pratyantardasha);
+  }, [activeDashaHierarchy.pratyantardasha]);
 
   // Timeline Navigation Handlers
   const handlePrevMonth = () => {
@@ -397,8 +397,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                 <Clock className="w-3.5 h-3.5 text-amber-400" />
                 Active Dasha Period
               </span>
-              <span className="font-mono text-[10px] text-amber-400/90">
-                {activeDashaHierarchy.startDate} &rarr; {activeDashaHierarchy.endDate}
+              <span className="font-mono text-[10px] text-amber-400/90 font-bold">
+                {activeDashaHierarchy.startDate} &rarr; {activeDashaHierarchy.endDate} ({activeDashaHierarchy.totalDays}d)
               </span>
             </div>
 
@@ -420,13 +420,43 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               </div>
 
               {/* Pratyantar Dasha */}
-              <div className="bg-slate-900/90 border border-amber-500/40 rounded-lg p-1.5 shadow-sm shadow-amber-500/10">
-                <span className="text-[10px] uppercase font-bold text-amber-400 block">PD Lord</span>
+              <div className="bg-slate-900/90 border border-amber-500/50 rounded-lg p-1.5 shadow-sm shadow-amber-500/20 ring-1 ring-amber-500/30">
+                <span className="text-[10px] uppercase font-bold text-amber-400 block flex items-center justify-center gap-1">
+                  <Zap className="w-2.5 h-2.5 text-amber-400 animate-pulse" />
+                  PD Lord
+                </span>
                 <span className="text-xs font-extrabold text-amber-200 truncate block">
                   {activeDashaHierarchy.pratyantardasha.split(' ')[0]}
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Selected Month Key Planetary Transits Strip */}
+        <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Gochara Coordinates ({MONTH_NAMES[selectedMonth]} {selectedYear}):</span>
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            {['Saturn', 'Jupiter', 'Mars', 'Rahu'].map(gKey => {
+              const tp = transitPlacements.find(p => p.graha_key === gKey);
+              if (!tp) return null;
+              return (
+                <span
+                  key={gKey}
+                  className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-300 flex items-center gap-1 font-mono text-[10px]"
+                >
+                  <strong className={gKey === 'Saturn' ? 'text-indigo-400' : gKey === 'Jupiter' ? 'text-yellow-400' : 'text-rose-400'}>
+                    {gKey}:
+                  </strong>
+                  <span>{tp.transit_rashi_tamil} ({tp.transit_rashi_name.split(' ')[0]})</span>
+                  <span className="text-amber-400/90">{tp.degree_sputa.split(' ')[0]}</span>
+                  {tp.is_retrograde && <span className="text-rose-400 font-bold">(R)</span>}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -552,6 +582,14 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               const isAspectSource = activeRaycast?.sourceSignIndex === signDef.index;
               const isAspectedTarget = !!aspectInfo && !isAspectSource;
 
+              // PD Lord Activation (Rulership or Occupation)
+              const isPdLordRulership = pdLordOwnedSigns.includes(signDef.index);
+              const pdLordShort = activeDashaHierarchy.pratyantardasha.split(' ')[0].toLowerCase();
+              const isPdLordOccupied =
+                natalOccupants.some(p => p.body_name.toLowerCase().includes(pdLordShort)) ||
+                currentTransitsInSign.some(p => p.graha_key.toLowerCase().includes(pdLordShort));
+              const isPdLordFocus = isPdLordRulership || isPdLordOccupied;
+
               return (
                 <div
                   key={`cell-${rowIdx}-${colIdx}`}
@@ -560,6 +598,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                       ? 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/10'
                       : isAspectSource
                       ? 'border-amber-400 bg-amber-950/20 ring-2 ring-amber-400/40'
+                      : isPdLordFocus
+                      ? 'border-amber-500/80 bg-amber-950/25 ring-2 ring-amber-400/50 shadow-md shadow-amber-500/10'
                       : isLagnaHouse
                       ? 'border-cyan-500/60 bg-cyan-950/25 ring-1 ring-cyan-500/30'
                       : 'border-slate-800/90 bg-slate-900/60 hover:border-slate-700'
@@ -587,12 +627,23 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                           Lagna
                         </span>
                       )}
+                      {isPdLordFocus && (
+                        <span
+                          className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5"
+                          title={`Active PD Lord (${activeDashaHierarchy.pratyantardasha}) ${isPdLordRulership ? 'Rulership House' : 'Occupation'}`}
+                        >
+                          <Zap className="w-2.5 h-2.5 text-amber-400" />
+                          PD
+                        </span>
+                      )}
                       <span
                         className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded ${
                           isLagnaHouse
                             ? 'bg-cyan-500 text-slate-950 font-extrabold'
                             : isAspectedTarget
                             ? 'bg-purple-500 text-white shadow-sm'
+                            : isPdLordFocus
+                            ? 'bg-amber-500 text-slate-950 font-bold'
                             : 'bg-slate-800 text-slate-300'
                         }`}
                         title={`House ${houseNum} relative to Lagna`}
