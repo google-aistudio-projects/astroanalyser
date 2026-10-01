@@ -155,8 +155,58 @@ ${part3}
     peakDateRange,
     rawMarkdown,
     providerUsed: provider,
-    executionTimeMs: Date.now() - startMs
+    executionTimeMs: Date.now() - startMs,
+    endpointUsed: provider === 'local_qwen' ? 'http://localhost:11434/api/generate' : provider === 'gemini_pro' ? 'Google GenAI Cloud API' : 'Anthropic Claude Messages API',
+    connectionStatus: 'simulated',
+    isPrivateLocal: provider === 'local_qwen',
+    promptSent: buildVedicPrompt(context, provider),
+    rawRequestBody: {
+      provider,
+      mode: 'deterministic_analytical_engine',
+      houseNumber: context.houseNumber,
+      activeDasha: context.activeDasha
+    },
+    rawResponseBody: {
+      status: 'synthesized_analytical_parashara',
+      summary,
+      confidence: isHigh ? 0.91 : 0.72,
+      microWindow: peakDateRange
+    }
   };
+}
+
+/**
+ * Health check helper for local Ollama instance
+ */
+export async function checkOllamaHealth(endpoint = 'http://localhost:11434'): Promise<{
+  isOnline: boolean;
+  version?: string;
+  models: string[];
+  error?: string;
+}> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1500);
+
+    const res = await fetch(`${endpoint}/api/tags`, {
+      method: 'GET',
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data = await res.json();
+      const models = Array.isArray(data.models) ? data.models.map((m: any) => m.name) : [];
+      return { isOnline: true, models };
+    }
+    return { isOnline: false, models: [], error: `HTTP ${res.status}: ${res.statusText}` };
+  } catch (err: any) {
+    return {
+      isOnline: false,
+      models: [],
+      error: err.name === 'AbortError' ? 'Connection timed out (Ollama not responding on port 11434)' : err.message || 'Connection refused'
+    };
+  }
 }
 
 /**
@@ -168,21 +218,26 @@ export class QwenLocalAdapter implements ILLMAdapter {
   async generateReasoning(context: VedicHouseContext): Promise<LLMThreePartNarrative> {
     const startMs = Date.now();
     const prompt = buildVedicPrompt(context, 'Local Qwen 2.5 14B');
+    const endpoint = 'http://localhost:11434/api/generate';
+
+    const requestBody = {
+      model: 'qwen2.5:14b-instruct',
+      prompt,
+      stream: false,
+      format: 'json',
+      options: { temperature: 0.3, num_predict: 1024 }
+    };
+
+    let connectionError: string | undefined;
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-      const res = await fetch('http://localhost:11434/api/generate', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'qwen2.5:14b-instruct',
-          prompt,
-          stream: false,
-          format: 'json',
-          options: { temperature: 0.3, num_predict: 1024 }
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal
       });
 
@@ -200,14 +255,45 @@ export class QwenLocalAdapter implements ILLMAdapter {
           peakDateRange: parsed.peakDateRange || `Active Month`,
           rawMarkdown: parsed.rawMarkdown || parsed.part1_probabilityAndScope,
           providerUsed: 'local_qwen',
-          executionTimeMs: Date.now() - startMs
+          executionTimeMs: Date.now() - startMs,
+          endpointUsed: endpoint,
+          connectionStatus: 'connected_live',
+          isPrivateLocal: true,
+          promptSent: prompt,
+          rawRequestBody: requestBody,
+          rawResponseBody: json,
+          httpStatus: res.status,
+          ollamaStats: {
+            model: json.model || 'qwen2.5:14b-instruct',
+            totalDurationMs: json.total_duration ? Math.round(json.total_duration / 1e6) : undefined,
+            loadDurationMs: json.load_duration ? Math.round(json.load_duration / 1e6) : undefined,
+            promptEvalCount: json.prompt_eval_count,
+            evalCount: json.eval_count
+          }
         };
+      } else {
+        connectionError = `Ollama returned HTTP ${res.status}: ${res.statusText}`;
       }
-    } catch {
-      // Local Ollama offline: seamlessly return analytical Vedic synthesis
+    } catch (err: any) {
+      connectionError = err.name === 'AbortError'
+        ? 'Connection timed out after 3000ms. Is Ollama listening on http://localhost:11434?'
+        : err.message || 'Failed to connect to http://localhost:11434 (Check if Ollama is running)';
     }
 
-    return synthesizeAnalyticalVedicNarrative(context, 'local_qwen', startMs);
+    const fallback = synthesizeAnalyticalVedicNarrative(context, 'local_qwen', startMs);
+    return {
+      ...fallback,
+      endpointUsed: endpoint,
+      connectionStatus: 'connection_failed_fallback',
+      connectionError,
+      isPrivateLocal: true,
+      promptSent: prompt,
+      rawRequestBody: requestBody,
+      rawResponseBody: {
+        fallback_reason: connectionError,
+        note: 'Executed deterministic Parashara heuristic engine because local Ollama daemon was not reachable.'
+      }
+    };
   }
 }
 
@@ -244,7 +330,13 @@ export class GeminiStudioAdapter implements ILLMAdapter {
           peakDateRange: parsed.peakDateRange || 'Mid Month',
           rawMarkdown: parsed.rawMarkdown || parsed.part1_probabilityAndScope,
           providerUsed: 'gemini_pro',
-          executionTimeMs: Date.now() - startMs
+          executionTimeMs: Date.now() - startMs,
+          endpointUsed: 'Google GenAI Cloud API (gemini-3.1-pro-preview)',
+          connectionStatus: 'connected_live',
+          isPrivateLocal: false,
+          promptSent: prompt,
+          rawRequestBody: { model: 'gemini-3.1-pro-preview', temperature: 0.2, responseMimeType: 'application/json' },
+          rawResponseBody: parsed
         };
       }
     } catch {

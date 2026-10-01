@@ -85,6 +85,23 @@ export interface LLMThreePartNarrative {
   rawMarkdown: string;
   providerUsed: LLMProviderId;
   executionTimeMs: number;
+
+  // Private LLM Verification & Wire Telemetry
+  endpointUsed: string;
+  connectionStatus: 'connected_live' | 'connection_failed_fallback' | 'simulated';
+  connectionError?: string;
+  isPrivateLocal: boolean;
+  promptSent: string;
+  rawRequestBody?: any;
+  rawResponseBody?: any;
+  httpStatus?: number;
+  ollamaStats?: {
+    model?: string;
+    totalDurationMs?: number;
+    loadDurationMs?: number;
+    promptEvalCount?: number;
+    evalCount?: number;
+  };
 }
 
 export interface ILLMAdapter {
