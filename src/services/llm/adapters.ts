@@ -185,14 +185,9 @@ export async function checkOllamaHealth(endpoint = 'http://localhost:11434'): Pr
   error?: string;
 }> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
-
     const res = await fetch(`${endpoint}/api/tags`, {
-      method: 'GET',
-      signal: controller.signal
+      method: 'GET'
     });
-    clearTimeout(timeout);
 
     if (res.ok) {
       const data = await res.json();
@@ -204,8 +199,27 @@ export async function checkOllamaHealth(endpoint = 'http://localhost:11434'): Pr
     return {
       isOnline: false,
       models: [],
-      error: err.name === 'AbortError' ? 'Connection timed out (Ollama not responding on port 11434)' : err.message || 'Connection refused'
+      error: err.message || 'Connection refused (Is Ollama running?)'
     };
+  }
+}
+
+/**
+ * Unloads the model and frees local GPU/VRAM and system memory in Ollama immediately.
+ */
+export async function purgeOllamaMemory(model?: string, endpoint = 'http://localhost:11434'): Promise<boolean> {
+  try {
+    await fetch(`${endpoint}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model || 'qwen2.5:14b-instruct',
+        keep_alive: 0
+      })
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -219,33 +233,55 @@ export class QwenLocalAdapter implements ILLMAdapter {
     const startMs = Date.now();
     const prompt = buildVedicPrompt(context, 'Local Qwen 2.5 14B');
     const endpoint = 'http://localhost:11434/api/generate';
+    const targetModel = context.selectedLocalModel || 'qwen2.5:14b-instruct';
 
+    // keep_alive: 0 ensures Ollama unloads the model from VRAM/RAM immediately upon finishing
     const requestBody = {
-      model: 'qwen2.5:14b-instruct',
+      model: targetModel,
       prompt,
       stream: false,
       format: 'json',
-      options: { temperature: 0.3, num_predict: 1024 }
+      keep_alive: 0,
+      options: {
+        temperature: 0.3,
+        num_predict: 1024,
+        num_ctx: 2048,
+        num_keep: 0
+      }
     };
 
     let connectionError: string | undefined;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-
+      // USER CONSTRAINT: Removed timeout factor completely for local execution.
+      // The request will wait as long as the local hardware needs without being aborted.
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
+        body: JSON.stringify(requestBody)
       });
-
-      clearTimeout(timeoutId);
 
       if (res.ok) {
         const json = await res.json();
-        const parsed = JSON.parse(json.response);
+
+        // Immediately trigger an explicit memory purge to release all VRAM/RAM for subsequent queries
+        purgeOllamaMemory(targetModel, endpoint).catch(() => {});
+
+        let parsed: any = {};
+        try {
+          let rawResp = (json.response || '').trim();
+          if (rawResp.startsWith('```json')) rawResp = rawResp.substring(7);
+          if (rawResp.startsWith('```')) rawResp = rawResp.substring(3);
+          if (rawResp.endsWith('```')) rawResp = rawResp.substring(0, rawResp.length - 3);
+          parsed = JSON.parse(rawResp.trim());
+        } catch {
+          parsed = {
+            part1_probabilityAndScope: json.response || 'Local Qwen synthesis generated.',
+            part2_financialAndResources: 'Derived from chart significations.',
+            part3_microTimingWindow: 'Active during the current Pratyantardasha window.'
+          };
+        }
+
         return {
           part1_probabilityAndScope: parsed.part1_probabilityAndScope || '',
           part2_financialAndResources: parsed.part2_financialAndResources || '',
@@ -263,8 +299,9 @@ export class QwenLocalAdapter implements ILLMAdapter {
           rawRequestBody: requestBody,
           rawResponseBody: json,
           httpStatus: res.status,
+          memoryPurged: true,
           ollamaStats: {
-            model: json.model || 'qwen2.5:14b-instruct',
+            model: json.model || targetModel,
             totalDurationMs: json.total_duration ? Math.round(json.total_duration / 1e6) : undefined,
             loadDurationMs: json.load_duration ? Math.round(json.load_duration / 1e6) : undefined,
             promptEvalCount: json.prompt_eval_count,
@@ -272,12 +309,17 @@ export class QwenLocalAdapter implements ILLMAdapter {
           }
         };
       } else {
-        connectionError = `Ollama returned HTTP ${res.status}: ${res.statusText}`;
+        const errJson = await res.json().catch(() => null);
+        const detailedErr = errJson?.error || res.statusText;
+        if (res.status === 404) {
+          connectionError = `Ollama HTTP 404: Model '${targetModel}' not found. You need to pull it first by running 'ollama pull ${targetModel}' in your terminal, or select an installed model from the dropdown.`;
+        } else {
+          connectionError = `Ollama HTTP ${res.status}: ${detailedErr}`;
+        }
       }
     } catch (err: any) {
-      connectionError = err.name === 'AbortError'
-        ? 'Connection timed out after 3000ms. Is Ollama listening on http://localhost:11434?'
-        : err.message || 'Failed to connect to http://localhost:11434 (Check if Ollama is running)';
+      connectionError = err.message || 'Failed to connect to http://localhost:11434 (Check if Ollama is running)';
+      purgeOllamaMemory(targetModel, endpoint).catch(() => {});
     }
 
     const fallback = synthesizeAnalyticalVedicNarrative(context, 'local_qwen', startMs);
@@ -291,10 +333,19 @@ export class QwenLocalAdapter implements ILLMAdapter {
       rawRequestBody: requestBody,
       rawResponseBody: {
         fallback_reason: connectionError,
-        note: 'Executed deterministic Parashara heuristic engine because local Ollama daemon was not reachable.'
+        requested_model: targetModel,
+        suggestion: resStatusSuggestion(connectionError, targetModel),
+        note: 'Executed deterministic Parashara heuristic engine because local Ollama could not find or run the requested model.'
       }
     };
   }
+}
+
+function resStatusSuggestion(errorMsg?: string, model?: string): string {
+  if (errorMsg && errorMsg.includes('404')) {
+    return `Model '${model}' is not in your Ollama library yet. Run: \`ollama pull ${model}\` or \`ollama run ${model}\`. If you already pulled another model (e.g. qwen2.5:14b or qwen2.5), select it in the inspector model dropdown.`;
+  }
+  return 'Make sure Ollama is running with CORS enabled: `OLLAMA_ORIGINS="*" ollama serve`';
 }
 
 /**

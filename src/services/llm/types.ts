@@ -73,6 +73,7 @@ export interface VedicHouseContext {
   selectedMonth: number; // 0..11
   selectedYear: number;
   userQuery?: string;
+  selectedLocalModel?: string;
 }
 
 export interface LLMThreePartNarrative {
@@ -95,6 +96,7 @@ export interface LLMThreePartNarrative {
   rawRequestBody?: any;
   rawResponseBody?: any;
   httpStatus?: number;
+  memoryPurged?: boolean;
   ollamaStats?: {
     model?: string;
     totalDurationMs?: number;

@@ -34,7 +34,7 @@ import {
   VedicHouseContext,
   LLMThreePartNarrative
 } from '../services/llm/types';
-import { llmService, checkOllamaHealth } from '../services/llm/adapters';
+import { llmService, checkOllamaHealth, purgeOllamaMemory } from '../services/llm/adapters';
 
 interface AudioVoiceInspectorProps {
   isOpen: boolean;
@@ -69,6 +69,11 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
   // Wire Telemetry State
   const [showWireLog, setShowWireLog] = useState<boolean>(false);
   const [wireLogTab, setWireLogTab] = useState<'prompt' | 'request' | 'response' | 'guide'>('prompt');
+  const [localOllamaModel, setLocalOllamaModel] = useState<string>(() => {
+    return localStorage.getItem('astro_ollama_model') || 'qwen2.5:14b-instruct';
+  });
+  const [availableOllamaModels, setAvailableOllamaModels] = useState<string[]>([]);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [ollamaPingResult, setOllamaPingResult] = useState<{
     checking: boolean;
     isOnline?: boolean;
@@ -79,6 +84,31 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
   // Recognition ref
   const recognitionRef = useRef<any>(null);
 
+  // Timer for generation
+  useEffect(() => {
+    let timer: any;
+    if (isGenerating) {
+      setElapsedSeconds(0);
+      timer = setInterval(() => {
+        setElapsedSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => clearInterval(timer);
+  }, [isGenerating]);
+
+  // Auto-scan Ollama models on open when provider is local
+  useEffect(() => {
+    if (isOpen && activeProvider === 'local_qwen') {
+      checkOllamaHealth().then(res => {
+        if (res.isOnline && res.models && res.models.length > 0) {
+          setAvailableOllamaModels(res.models);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, activeProvider]);
+
   // Initialize synthesis when context changes
   useEffect(() => {
     if (isOpen && context) {
@@ -86,7 +116,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
     } else {
       stopSpeech();
     }
-  }, [isOpen, context?.houseNumber, activeProvider]);
+  }, [isOpen, context?.houseNumber, activeProvider, localOllamaModel]);
 
   // Clean up speech when unmounting or closing
   useEffect(() => {
@@ -109,7 +139,8 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
       const q = customQuery !== undefined ? customQuery : queryText;
       const result = await llmService.generate(activeProvider, {
         ...context,
-        userQuery: q || undefined
+        userQuery: q || undefined,
+        selectedLocalModel: localOllamaModel
       });
       setNarrative(result);
     } catch (e) {
@@ -128,6 +159,27 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
       models: res.models,
       error: res.error
     });
+    if (res.models && res.models.length > 0) {
+      setAvailableOllamaModels(res.models);
+      if (!res.models.includes(localOllamaModel)) {
+        const matchingQwen = res.models.find(m => m.toLowerCase().includes('qwen'));
+        if (matchingQwen) {
+          setLocalOllamaModel(matchingQwen);
+          localStorage.setItem('astro_ollama_model', matchingQwen);
+        }
+      }
+    }
+  };
+
+  const [purgedToast, setPurgedToast] = useState<boolean>(false);
+  const [isPurging, setIsPurging] = useState<boolean>(false);
+
+  const handleManualPurge = async () => {
+    setIsPurging(true);
+    await purgeOllamaMemory(localOllamaModel);
+    setIsPurging(false);
+    setPurgedToast(true);
+    setTimeout(() => setPurgedToast(false), 3000);
   };
 
   // Web Speech API: Voice Input (Microphone)
@@ -305,6 +357,41 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                 );
               })}
             </div>
+
+            {/* Ollama Model Tag Selector */}
+            {activeProvider === 'local_qwen' && (
+              <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 px-2 py-1 rounded-lg">
+                <span className="text-[10px] text-slate-400 font-mono">Model:</span>
+                {availableOllamaModels.length > 0 ? (
+                  <select
+                    value={localOllamaModel}
+                    onChange={(e) => {
+                      setLocalOllamaModel(e.target.value);
+                      localStorage.setItem('astro_ollama_model', e.target.value);
+                    }}
+                    className="bg-transparent text-amber-300 font-mono text-[11px] font-bold focus:outline-none cursor-pointer"
+                  >
+                    {availableOllamaModels.map(m => (
+                      <option key={m} value={m} className="bg-slate-900 text-white font-mono">
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={localOllamaModel}
+                    onChange={(e) => {
+                      setLocalOllamaModel(e.target.value);
+                      localStorage.setItem('astro_ollama_model', e.target.value);
+                    }}
+                    className="bg-transparent text-amber-300 font-mono text-[11px] font-bold w-36 focus:outline-none"
+                    placeholder="qwen2.5:14b-instruct"
+                    title="Exact Ollama model tag on your machine"
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Audio Playback Controls */}
@@ -388,6 +475,13 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
             <span className="text-slate-400 text-[11px] font-mono hidden md:inline">
               Target: <span className="text-slate-300">{narrative?.endpointUsed || 'http://localhost:11434/api/generate'}</span>
             </span>
+
+            {narrative?.memoryPurged && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-semibold" title="VRAM memory purged immediately upon completion to prevent delay on subsequent prompts">
+                <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                VRAM Purged
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -401,15 +495,27 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
             </button>
 
             {activeProvider === 'local_qwen' && (
-              <button
-                onClick={handleTestOllamaConnection}
-                disabled={ollamaPingResult?.checking}
-                className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 transition text-[11px]"
-                title="Pings http://localhost:11434/api/tags to verify if your local Ollama daemon is active"
-              >
-                <Radio className={`w-3 h-3 ${ollamaPingResult?.checking ? 'text-amber-400 animate-spin' : 'text-slate-400'}`} />
-                <span>Test Ollama (:11434)</span>
-              </button>
+              <>
+                <button
+                  onClick={handleTestOllamaConnection}
+                  disabled={ollamaPingResult?.checking}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 transition text-[11px]"
+                  title="Pings http://localhost:11434/api/tags to verify if your local Ollama daemon is active"
+                >
+                  <Radio className={`w-3 h-3 ${ollamaPingResult?.checking ? 'text-amber-400 animate-spin' : 'text-slate-400'}`} />
+                  <span>Test Ollama</span>
+                </button>
+
+                <button
+                  onClick={handleManualPurge}
+                  disabled={isPurging}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition text-[11px]"
+                  title="Immediately unloads model from VRAM/RAM to free memory for subsequent prompts"
+                >
+                  <Zap className={`w-3 h-3 ${isPurging ? 'text-amber-400 animate-spin' : 'text-emerald-400'}`} />
+                  <span>{isPurging ? 'Purging...' : purgedToast ? '✓ VRAM Cleared' : '🧹 Purge VRAM'}</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -442,6 +548,41 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
             >
               <X className="w-3.5 h-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* 404 MODEL NOT FOUND BANNER */}
+        {narrative?.providerUsed === 'local_qwen' && narrative?.connectionError?.includes('404') && (
+          <div className="px-5 py-2.5 bg-amber-950/70 border-b border-amber-500/50 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-200 animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <p className="font-bold text-amber-300">
+                  Ollama is running on port 11434, but model <code className="bg-slate-950 px-1.5 py-0.5 rounded text-white font-mono">{localOllamaModel}</code> is not in your library!
+                </p>
+                <p className="text-[11px] text-amber-300/80 mt-0.5">
+                  Run this terminal command to download it, or select an installed model from the dropdown above:
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="px-2.5 py-1 rounded bg-slate-950 border border-amber-500/40 font-mono text-[11px] text-emerald-400 select-all flex items-center gap-2 shadow-inner">
+                <span>ollama pull {localOllamaModel}</span>
+                <button
+                  onClick={() => handleCopy(`ollama pull ${localOllamaModel}`, 'pull_cmd')}
+                  className="text-amber-400 hover:text-white"
+                  title="Copy command"
+                >
+                  {copied === 'pull_cmd' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <button
+                onClick={handleTestOllamaConnection}
+                className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition text-xs shadow"
+              >
+                Scan My Models
+              </button>
+            </div>
           </div>
         )}
 
@@ -655,9 +796,22 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
           {isGenerating ? (
             <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
               <RotateCcw className="w-8 h-8 text-amber-400 animate-spin" />
-              <p className="text-xs font-mono">
-                Synthesizing Parashara telemetry with {LLM_PROVIDERS[activeProvider].name}...
-              </p>
+              <div className="text-center space-y-1">
+                <p className="text-xs font-mono font-bold text-white">
+                  Running {LLM_PROVIDERS[activeProvider].name} {activeProvider === 'local_qwen' ? `(${localOllamaModel})` : ''}...
+                </p>
+                {activeProvider === 'local_qwen' && (
+                  <div className="space-y-1 mt-1">
+                    <p className="text-[11px] text-amber-300 font-mono">
+                      Executing local inference on your hardware: <span className="font-bold text-white text-xs">{elapsedSeconds}s</span>
+                    </p>
+                    <p className="text-[10px] text-emerald-400 font-mono flex items-center justify-center gap-1">
+                      <Zap className="w-3 h-3 text-emerald-400" />
+                      <span>Zero timeout limit active • Model VRAM &amp; prompt memory auto-purged immediately on completion</span>
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           ) : narrative ? (
             <div className="space-y-3.5">
