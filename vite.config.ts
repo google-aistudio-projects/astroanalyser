@@ -1,9 +1,9 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig, Plugin } from 'vite';
+import { defineConfig, loadEnv, Plugin } from 'vite';
 
-function geminiApiPlugin(): Plugin {
+function geminiApiPlugin(env: Record<string, string>): Plugin {
   return {
     name: 'gemini-api-plugin',
     configureServer(server) {
@@ -20,17 +20,19 @@ function geminiApiPlugin(): Plugin {
         req.on('end', async () => {
           try {
             const { prompt } = JSON.parse(body || '{}');
-            const apiKey = process.env.GEMINI_API_KEY;
+            const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
             if (!apiKey) {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'GEMINI_API_KEY not configured on server' }));
+              res.end(JSON.stringify({
+                error: 'GEMINI_API_KEY not configured. Add GEMINI_API_KEY to your .env file or environment variables.'
+              }));
               return;
             }
 
             const { GoogleGenAI } = await import('@google/genai');
-            const ai = new GoogleGenAI();
+            const ai = new GoogleGenAI({ apiKey });
 
             let response;
             let usedModel = 'gemini-3.8-flash';
@@ -73,9 +75,11 @@ function geminiApiPlugin(): Plugin {
   };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
   return {
-    plugins: [react(), tailwindcss(), geminiApiPlugin()],
+    plugins: [react(), tailwindcss(), geminiApiPlugin(env)],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

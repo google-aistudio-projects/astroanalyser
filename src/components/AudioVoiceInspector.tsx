@@ -26,7 +26,8 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
-  Cpu
+  Cpu,
+  FileText
 } from 'lucide-react';
 import {
   LLMProviderId,
@@ -35,6 +36,7 @@ import {
   LLMThreePartNarrative
 } from '../services/llm/types';
 import { llmService, checkOllamaHealth, purgeOllamaMemory } from '../services/llm/adapters';
+import { generateVedicPdfReport } from '../services/pdfReportGenerator';
 
 interface AudioVoiceInspectorProps {
   isOpen: boolean;
@@ -268,6 +270,20 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+
+  const handleDownloadPdf = () => {
+    if (!narrative || !context) return;
+    setIsExportingPdf(true);
+    try {
+      generateVedicPdfReport(context, narrative);
+    } catch (err) {
+      console.error('PDF export error:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const handleDownloadReport = () => {
     if (!narrative || !context) return;
     const blob = new Blob([JSON.stringify({ context, narrative }, null, 2)], {
@@ -320,6 +336,25 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isGenerating || !narrative || isExportingPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition text-xs shadow disabled:opacity-40"
+              title="Download Astrological Inference Report (PDF) with time period, MD/AD/PD lords, and LLM inference"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{isExportingPdf ? 'Exporting...' : 'Download PDF'}</span>
+            </button>
+
+            <button
+              onClick={handleDownloadReport}
+              disabled={isGenerating || !narrative}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition"
+              title="Export Raw JSON"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition"
@@ -866,6 +901,29 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                   {narrative.part3_microTimingWindow}
                 </p>
               </div>
+
+              {/* PDF EXPORT BANNER */}
+              <div className="p-3 bg-slate-950/80 border border-amber-500/40 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
+                <div className="flex items-center gap-2.5 text-slate-300">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-amber-300 text-xs">Download Astrological Inference Report (PDF)</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Formatted document with Time Period, MD / AD / PD Lords, chart significations, and complete 3-part LLM inference.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={!narrative || isExportingPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold transition text-xs shadow-md disabled:opacity-40 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isExportingPdf ? 'Generating PDF...' : 'Download PDF Report'}</span>
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -881,6 +939,16 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={!narrative || isExportingPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition disabled:opacity-50 shadow"
+              title="Download full Astrological Inference PDF"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{isExportingPdf ? 'Exporting...' : 'Download PDF'}</span>
+            </button>
+
             <button
               onClick={() => handleCopy(narrative?.rawMarkdown || '', 'markdown')}
               disabled={!narrative}
