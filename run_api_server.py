@@ -778,6 +778,60 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode())
             return
 
+        elif parsed.path == "/api/llm/gemini":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_bytes = self.rfile.read(content_length)
+            try:
+                data = json.loads(body_bytes.decode()) if body_bytes else {}
+            except Exception:
+                data = {}
+
+            prompt = data.get("prompt", "")
+            api_key = os.environ.get("GEMINI_API_KEY", "")
+
+            if not api_key:
+                self._set_headers(500)
+                self.wfile.write(json.dumps({"error": "GEMINI_API_KEY not configured"}).encode())
+                return
+
+            import urllib.request
+            req_data = json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}
+            }).encode('utf-8')
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+            req = urllib.request.Request(url, data=req_data, headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    resp_json = json.loads(resp.read().decode('utf-8'))
+                    text = resp_json.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    self._set_headers(200)
+                    self.wfile.write(json.dumps({
+                        "text": text,
+                        "model": "gemini-3.8-flash",
+                        "usageMetadata": resp_json.get("usageMetadata", {})
+                    }).encode())
+                    return
+            except Exception as e:
+                url2 = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
+                req2 = urllib.request.Request(url2, data=req_data, headers={"Content-Type": "application/json"}, method="POST")
+                try:
+                    with urllib.request.urlopen(req2, timeout=15) as resp2:
+                        resp_json2 = json.loads(resp2.read().decode('utf-8'))
+                        text2 = resp_json2.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        self._set_headers(200)
+                        self.wfile.write(json.dumps({
+                            "text": text2,
+                            "model": "gemini-3.1-flash-lite",
+                            "usageMetadata": resp_json2.get("usageMetadata", {})
+                        }).encode())
+                        return
+                except Exception as e2:
+                    self._set_headers(500)
+                    self.wfile.write(json.dumps({"error": str(e2)}).encode())
+                    return
+
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode())
 

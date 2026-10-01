@@ -306,44 +306,95 @@ export class GeminiStudioAdapter implements ILLMAdapter {
   async generateReasoning(context: VedicHouseContext): Promise<LLMThreePartNarrative> {
     const startMs = Date.now();
     const prompt = buildVedicPrompt(context, 'Google Gemini Pro');
+    const endpoint = '/api/llm/gemini';
+
+    const requestBody = {
+      model: 'gemini-3.8-flash',
+      prompt
+    };
+
+    let connectionError: string | undefined;
 
     try {
-      const ai = new GoogleGenAI();
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
-        contents: prompt,
-        config: {
-          temperature: 0.2,
-          maxOutputTokens: 1500,
-          responseMimeType: 'application/json'
-        }
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
       });
 
-      if (response && response.text) {
-        const parsed = JSON.parse(response.text);
+      if (res.ok) {
+        const json = await res.json();
+        // Clean markdown backticks if Gemini wrapped the JSON in ```json ... ```
+        let cleanText = (json.text || '').trim();
+        if (cleanText.startsWith('```json')) {
+          cleanText = cleanText.substring(7);
+        } else if (cleanText.startsWith('```')) {
+          cleanText = cleanText.substring(3);
+        }
+        if (cleanText.endsWith('```')) {
+          cleanText = cleanText.substring(0, cleanText.length - 3);
+        }
+        cleanText = cleanText.trim();
+
+        const parsed = JSON.parse(cleanText);
+
+        const rawMarkdown = `### Astrological Reasoning & Micro-Timing Report (GOOGLE GEMINI)
+**Target:** House ${context.houseNumber} (${context.rashiName} / ${context.tamilName})  
+**Timeline:** Month ${context.selectedMonth + 1}/${context.selectedYear} | **PD Lord:** ${context.activeDasha.pratyantardasha}  
+**Model:** ${json.model || 'gemini-3.8-flash'}  
+
+---
+#### 1. Event Probability & Scope
+${parsed.part1_probabilityAndScope}
+
+#### 2. Financial & Resource Sources
+${parsed.part2_financialAndResources}
+
+#### 3. Micro-Timing Window
+${parsed.part3_microTimingWindow}
+`;
+
         return {
           part1_probabilityAndScope: parsed.part1_probabilityAndScope || '',
           part2_financialAndResources: parsed.part2_financialAndResources || '',
           part3_microTimingWindow: parsed.part3_microTimingWindow || '',
-          summarySentence: parsed.summarySentence || 'Gemini Pro synthesis complete.',
+          summarySentence: parsed.summarySentence || 'Google Gemini Pro synthesis complete.',
           overallConfidence: parsed.overallConfidence || 0.94,
           peakDateRange: parsed.peakDateRange || 'Mid Month',
-          rawMarkdown: parsed.rawMarkdown || parsed.part1_probabilityAndScope,
+          rawMarkdown,
           providerUsed: 'gemini_pro',
           executionTimeMs: Date.now() - startMs,
-          endpointUsed: 'Google GenAI Cloud API (gemini-3.1-pro-preview)',
+          endpointUsed: `Google Gemini Cloud API (${json.model || 'gemini-3.8-flash'})`,
           connectionStatus: 'connected_live',
           isPrivateLocal: false,
           promptSent: prompt,
-          rawRequestBody: { model: 'gemini-3.1-pro-preview', temperature: 0.2, responseMimeType: 'application/json' },
-          rawResponseBody: parsed
+          rawRequestBody: requestBody,
+          rawResponseBody: json,
+          httpStatus: res.status
         };
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        connectionError = errJson.error || `HTTP ${res.status}: ${res.statusText}`;
       }
-    } catch {
-      // Graceful fallback to analytical synthesis
+    } catch (err: any) {
+      connectionError = err.message || 'Failed to reach /api/llm/gemini proxy';
     }
 
-    return synthesizeAnalyticalVedicNarrative(context, 'gemini_pro', startMs);
+    // Graceful fallback to analytical synthesis if cloud API unreachable
+    const fallback = synthesizeAnalyticalVedicNarrative(context, 'gemini_pro', startMs);
+    return {
+      ...fallback,
+      endpointUsed: 'Google Gemini Cloud API (/api/llm/gemini)',
+      connectionStatus: 'connection_failed_fallback',
+      connectionError,
+      isPrivateLocal: false,
+      promptSent: prompt,
+      rawRequestBody: requestBody,
+      rawResponseBody: {
+        fallback_reason: connectionError,
+        note: 'Executed deterministic Parashara heuristic engine because Gemini Cloud API returned an error.'
+      }
+    };
   }
 }
 
