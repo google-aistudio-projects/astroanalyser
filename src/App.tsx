@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Compass,
   Calendar,
+  CalendarDays,
   Sparkles,
   Info,
   Server,
@@ -21,6 +22,7 @@ import {
 } from './data/apiService';
 import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
 import PdfIngestionStudio from './components/PdfIngestionStudio';
+import { MonthlyTransitView } from './components/MonthlyTransitView';
 
 // Standard 12 South Indian chart cell coordinate mappings (row, col)
 // 0,0: Meenam (Pisces)   | 0,1: Mesham (Aries)   | 0,2: Rishabam (Taurus) | 0,3: Mithunam (Gemini)
@@ -55,7 +57,7 @@ const SOUTH_INDIAN_CELLS: ChartCellDef[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'api' | 'pdf_ingest' | 'charts' | 'overview'>('api');
+  const [activeTab, setActiveTab] = useState<'api' | 'pdf_ingest' | 'charts' | 'overview' | 'monthly'>('monthly');
   const [selectedChart, setSelectedChart] = useState<'D1' | 'D9'>('D1');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -133,6 +135,7 @@ export default function App() {
               { id: 'pdf_ingest', label: 'Upload & Ingest PDF', icon: UploadCloud },
               { id: 'charts', label: 'South Indian Chart Visualizer', icon: Compass },
               { id: 'overview', label: 'Horoscope Overview (001ME)', icon: BookOpen },
+              { id: 'monthly', label: 'Monthly View', icon: CalendarDays },
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -573,6 +576,10 @@ export default function App() {
             copied={copied}
             downloadFile={downloadFile}
           />
+        )}
+        {/* TAB 4: MONTHLY VIEW (D1 DUAL-LAYER TRANSIT & RAYCASTER) */}
+        {activeTab === 'monthly' && (
+          <MonthlyTransitView personId={apiPersonId || '001ME'} />
         )}
       </main>
 

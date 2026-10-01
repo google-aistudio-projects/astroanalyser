@@ -1,0 +1,527 @@
+import React, { useState, useMemo } from 'react';
+import {
+  CalendarDays,
+  Sparkles,
+  Eye,
+  Layers,
+  Compass,
+  Info,
+  X,
+  Target,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2
+} from 'lucide-react';
+import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
+import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
+
+/**
+ * 12 Signs Metadata with Fixed South Indian Grid Coordinates & Zodiac Iconography
+ */
+export interface ZodiacSignMeta {
+  index: number; // 1 = Aries .. 12 = Pisces
+  eng: string;
+  tamil: string;
+  lord: string;
+  r: number; // Row in 4x4 grid (0..3)
+  c: number; // Col in 4x4 grid (0..3)
+  icon: string; // Astrological Archetype Emoji/Icon
+  symbol: string; // Astronomical Symbol
+}
+
+export const SOUTH_INDIAN_SIGNS: ZodiacSignMeta[] = [
+  // Row 0 (Top)
+  { index: 12, eng: 'Meenam (Pisces)', tamil: 'மீனம்', lord: 'Jupiter (Guru)', r: 0, c: 0, icon: '🐟', symbol: '♓' },
+  { index: 1, eng: 'Mesham (Aries)', tamil: 'மேஷம்', lord: 'Mars (Sevvai)', r: 0, c: 1, icon: '🐏', symbol: '♈' },
+  { index: 2, eng: 'Rishabam (Taurus)', tamil: 'ரிஷபம்', lord: 'Venus (Sukra)', r: 0, c: 2, icon: '🐂', symbol: '♉' },
+  { index: 3, eng: 'Mithunam (Gemini)', tamil: 'மிதுனம்', lord: 'Mercury (Budha)', r: 0, c: 3, icon: '👥', symbol: '♊' },
+
+  // Row 1
+  { index: 11, eng: 'Kumbam (Aquarius)', tamil: 'கும்பம்', lord: 'Saturn (Sani)', r: 1, c: 0, icon: '🏺', symbol: '♒' },
+  { index: 4, eng: 'Katakam (Cancer)', tamil: 'கடகம்', lord: 'Moon (Chandra)', r: 1, c: 3, icon: '🦀', symbol: '♋' },
+
+  // Row 2
+  { index: 10, eng: 'Makaram (Capricorn)', tamil: 'மகரம்', lord: 'Saturn (Sani)', r: 2, c: 0, icon: '🐐', symbol: '♑' },
+  { index: 5, eng: 'Simham (Leo)', tamil: 'சிம்மம்', lord: 'Sun (Surya)', r: 2, c: 3, icon: '🦁', symbol: '♌' },
+
+  // Row 3 (Bottom)
+  { index: 9, eng: 'Dhanus (Sagittarius)', tamil: 'தனுசு', lord: 'Jupiter (Guru)', r: 3, c: 0, icon: '🏹', symbol: '♐' },
+  { index: 8, eng: 'Vrischigam (Scorpio)', tamil: 'விருச்சிகம்', lord: 'Mars (Sevvai)', r: 3, c: 1, icon: '🦂', symbol: '♏' },
+  { index: 7, eng: 'Thulaam (Libra)', tamil: 'துலாம்', lord: 'Venus (Sukra)', r: 3, c: 2, icon: '⚖️', symbol: '♎' },
+  { index: 6, eng: 'Kanni (Virgo)', tamil: 'கன்னி', lord: 'Mercury (Budha)', r: 3, c: 3, icon: '🌾', symbol: '♍' },
+];
+
+/**
+ * Standard Vedic Planet Symbols & Short Codes
+ */
+export const PLANET_ICONS: Record<string, { symbol: string; short: string; color: string }> = {
+  Sun: { symbol: '☉', short: 'Su', color: 'text-amber-400' },
+  Moon: { symbol: '☽', short: 'Mo', color: 'text-sky-300' },
+  Mars: { symbol: '♂', short: 'Ma', color: 'text-rose-400' },
+  Mercury: { symbol: '☿', short: 'Me', color: 'text-emerald-400' },
+  Jupiter: { symbol: '♃', short: 'Ju', color: 'text-yellow-300' },
+  Venus: { symbol: '♀', short: 'Ve', color: 'text-pink-300' },
+  Saturn: { symbol: '♄', short: 'Sa', color: 'text-indigo-400' },
+  Rahu: { symbol: '☊', short: 'Ra', color: 'text-purple-400' },
+  Ketu: { symbol: '☋', short: 'Ke', color: 'text-violet-400' },
+  Lagna: { symbol: 'Asc', short: 'Lag', color: 'text-cyan-300' },
+};
+
+/**
+ * Classical Vedic Graha Drishti (Aspect Rules)
+ */
+export function calculateGrahaDrishti(
+  sourceSignIndex: number,
+  planetKey: string
+): { targetSignIndex: number; aspectType: string; aspectDegree: number }[] {
+  const aspects: { targetSignIndex: number; aspectType: string; aspectDegree: number }[] = [];
+
+  // Helper to add aspect house (1-based relative house)
+  const addAspect = (houseOffset: number, label: string) => {
+    // 1st house is sourceSignIndex itself
+    const targetIdx = ((sourceSignIndex - 1 + (houseOffset - 1)) % 12) + 1;
+    aspects.push({
+      targetSignIndex: targetIdx,
+      aspectType: label,
+      aspectDegree: houseOffset === 1 ? 0 : (houseOffset - 1) * 30
+    });
+  };
+
+  // Base 1st house (self-occupation)
+  addAspect(1, 'Occupation (1st)');
+
+  // All Grahas have 7th house full aspect
+  addAspect(7, 'Full 7th Drishti');
+
+  // Special aspects
+  const p = planetKey.toLowerCase();
+  if (p.includes('saturn') || p.includes('sani') || p.includes('sa')) {
+    // Saturn: 3rd and 10th special full aspects
+    addAspect(3, 'Special 3rd Drishti');
+    addAspect(10, 'Special 10th Drishti');
+  } else if (p.includes('mars') || p.includes('sevvai') || p.includes('ma')) {
+    // Mars: 4th and 8th special full aspects
+    addAspect(4, 'Special 4th Drishti');
+    addAspect(8, 'Special 8th Drishti');
+  } else if (p.includes('jupiter') || p.includes('guru') || p.includes('ju')) {
+    // Jupiter: 5th and 9th trinal special full aspects
+    addAspect(5, 'Special 5th Drishti');
+    addAspect(9, 'Special 9th Drishti');
+  } else if (p.includes('rahu') || p.includes('ketu') || p.includes('ra') || p.includes('ke')) {
+    // Rahu / Ketu: 5th and 9th trinal aspects
+    addAspect(5, 'Trine 5th Drishti');
+    addAspect(9, 'Trine 9th Drishti');
+  }
+
+  return aspects;
+}
+
+export interface MonthlyTransitViewProps {
+  personId?: string;
+}
+
+export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId = '001ME' }) => {
+  // Active selected planet for Raycasting
+  const [activeRaycast, setActiveRaycast] = useState<{
+    id: string;
+    name: string;
+    sourceSignIndex: number;
+    sourceSignName: string;
+    layer: 'natal' | 'transit';
+    aspectTargets: { targetSignIndex: number; aspectType: string; aspectDegree: number }[];
+  } | null>(null);
+
+  // Active Month for Transit snapshot (Defaults to current date)
+  const [currentDate] = useState<Date>(new Date());
+
+  // Natal Lagna Sign Index (001ME = Dhanus / Sagittarius = 9)
+  const natalLagnaIdx = 9;
+  const natalRashiIdx = 8; // Vrischigam / Scorpio
+
+  // D1 Natal Placements
+  const natalD1Placements = useMemo(() => {
+    return sampleNatalPlacements.filter(p => p.chart_type === 'D1');
+  }, []);
+
+  // Compute Current Month Transits (Gochara) using astronomical ephemeris
+  const transitPlacements = useMemo(() => {
+    const grahaKeys = ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn', 'Rahu', 'Ketu'];
+    return grahaKeys.map(k => getGrahaTransitPosition(k, currentDate, natalLagnaIdx, natalRashiIdx));
+  }, [currentDate, natalLagnaIdx, natalRashiIdx]);
+
+  // Handle clicking a planet to trigger aspect raycasting
+  const handlePlanetClick = (
+    e: React.MouseEvent,
+    planetName: string,
+    signIndex: number,
+    signName: string,
+    layer: 'natal' | 'transit'
+  ) => {
+    e.stopPropagation();
+    const planetId = `${layer}-${planetName}-${signIndex}`;
+
+    if (activeRaycast && activeRaycast.id === planetId) {
+      // Toggle off
+      setActiveRaycast(null);
+      return;
+    }
+
+    const aspects = calculateGrahaDrishti(signIndex, planetName);
+    setActiveRaycast({
+      id: planetId,
+      name: planetName,
+      sourceSignIndex: signIndex,
+      sourceSignName: signName,
+      layer,
+      aspectTargets: aspects
+    });
+  };
+
+  // Find aspect information for a given sign index
+  const getAspectInfoForSign = (signIndex: number) => {
+    if (!activeRaycast) return null;
+    return activeRaycast.aspectTargets.find(a => a.targetSignIndex === signIndex);
+  };
+
+  return (
+    <div className="space-y-5" onClick={() => setActiveRaycast(null)}>
+      {/* Top Banner: Status & Raycaster State */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg shadow-inner">
+            <CalendarDays className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-white tracking-tight">
+                South Indian D1 Monthly Transit Visualizer
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Milestone 1 Active
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Dual-layer Vedic chart: Solid Natal birth base + Semi-transparent Transit Gochara overlay for current 30-day window.
+            </p>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm" />
+            Natal Birth Planet
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400/60 shadow-sm" />
+            [Tr] Transit Gochara
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 font-medium">
+            <Target className="w-3.5 h-3.5 text-purple-400" />
+            Click Planet for Drishti
+          </span>
+        </div>
+      </div>
+
+      {/* Active Graha Drishti Raycasting Status Bar */}
+      {activeRaycast ? (
+        <div className="bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/80 border border-purple-500/40 rounded-xl p-3.5 text-xs flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-purple-500/5 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-300">
+              <Sparkles className="w-4 h-4 text-purple-300 animate-pulse" />
+            </span>
+            <div>
+              <span className="font-bold text-white text-sm">
+                Graha Drishti Active: {activeRaycast.layer === 'natal' ? 'Natal' : 'Transit'} {activeRaycast.name}
+              </span>
+              <span className="text-slate-300 ml-2">
+                in {activeRaycast.sourceSignName} &rarr; illuminating {activeRaycast.aspectTargets.length} target houses
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {activeRaycast.aspectTargets.map(tgt => {
+                const sDef = SOUTH_INDIAN_SIGNS.find(s => s.index === tgt.targetSignIndex);
+                const hNum = ((tgt.targetSignIndex - natalLagnaIdx + 12) % 12) + 1;
+                return (
+                  <span
+                    key={tgt.targetSignIndex}
+                    className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-400/40 text-purple-200 font-mono text-[11px]"
+                  >
+                    H{hNum} ({sDef?.tamil} - {tgt.aspectType})
+                  </span>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setActiveRaycast(null)}
+              className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              title="Clear Drishti"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl px-4 py-2.5 text-xs text-slate-400 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-slate-500" />
+            Click on any planet badge (e.g. <strong>Saturn</strong>, <strong>Jupiter</strong>, or <strong>Mars</strong>) to raycast and highlight its aspected houses (Graha Drishti).
+          </span>
+          <span className="text-[11px] text-slate-500 font-mono">
+            Saturn: 3/7/10 &bull; Mars: 4/7/8 &bull; Jupiter: 5/7/9
+          </span>
+        </div>
+      )}
+
+      {/* FULL SCREEN 4x4 SOUTH INDIAN D1 GRID */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xl">
+        <div className="grid grid-cols-4 grid-rows-4 gap-2.5 sm:gap-3.5 aspect-square max-w-4xl mx-auto bg-slate-950 p-2.5 sm:p-3.5 rounded-2xl border border-slate-800 shadow-inner">
+          {[0, 1, 2, 3].map(rowIdx =>
+            [0, 1, 2, 3].map(colIdx => {
+              // Center 2x2 hollow container
+              if ((rowIdx === 1 || rowIdx === 2) && (colIdx === 1 || colIdx === 2)) {
+                if (rowIdx === 1 && colIdx === 1) {
+                  return (
+                    <div
+                      key={`center-${rowIdx}-${colIdx}`}
+                      className="col-span-2 row-span-2 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-5 text-center shadow-inner relative overflow-hidden"
+                    >
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-2xl shadow-inner mb-2">
+                        ௐ
+                      </div>
+                      <div className="text-base sm:text-lg font-bold text-white tracking-tight">
+                        D1 இராசி சக்கரம்
+                      </div>
+                      <div className="text-xs font-semibold text-amber-400 mt-0.5">
+                        Dual-Layer Monthly Transit Kundali
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-2 max-w-xs leading-relaxed">
+                        Lagna: <strong className="text-cyan-400">தனுசு (Sagittarius)</strong> = House 1 &bull; Numbering clockwise 1 to 12
+                      </div>
+
+                      {/* Summary pill */}
+                      <div className="mt-3 flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300">
+                        <Layers className="w-3.5 h-3.5 text-amber-400" />
+                        <span>9 Natal + 9 Gochara Transits</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null; // Taken by col-span-2 row-span-2
+              }
+
+              // Perimeter sign cell
+              const signDef = SOUTH_INDIAN_SIGNS.find(s => s.r === rowIdx && s.c === colIdx);
+              if (!signDef) return null;
+
+              // Calculate relative house from birth Lagna (Dhanus = 9 => House 1)
+              const houseNum = ((signDef.index - natalLagnaIdx + 12) % 12) + 1;
+              const isLagnaHouse = houseNum === 1;
+
+              // Find Natal Occupants in this sign
+              const natalOccupants = natalD1Placements.filter(p => {
+                const norm = p.rashi_name.toLowerCase();
+                const signNorm = signDef.eng.toLowerCase();
+                return signNorm.includes(norm) || norm.includes(signDef.tamil);
+              });
+
+              // Find Transit Occupants in this sign
+              const currentTransitsInSign = transitPlacements.filter(
+                tp => tp.transit_rashi_index === signDef.index
+              );
+
+              // Aspect Info for this cell if raycasting
+              const aspectInfo = getAspectInfoForSign(signDef.index);
+              const isAspectSource = activeRaycast?.sourceSignIndex === signDef.index;
+              const isAspectedTarget = !!aspectInfo && !isAspectSource;
+
+              return (
+                <div
+                  key={`cell-${rowIdx}-${colIdx}`}
+                  className={`relative rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-200 border ${
+                    isAspectedTarget
+                      ? 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/10'
+                      : isAspectSource
+                      ? 'border-amber-400 bg-amber-950/20 ring-2 ring-amber-400/40'
+                      : isLagnaHouse
+                      ? 'border-cyan-500/60 bg-cyan-950/25 ring-1 ring-cyan-500/30'
+                      : 'border-slate-800/90 bg-slate-900/60 hover:border-slate-700'
+                  }`}
+                >
+                  {/* CELL HEADER: Zodiac Symbol, Icon, Tamil Name & Relative House */}
+                  <div className="flex items-center justify-between gap-1 leading-none pb-1 border-b border-slate-800/60">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm select-none" title={signDef.eng}>
+                        {signDef.icon}
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-[11px] sm:text-xs font-bold text-slate-200">
+                          {signDef.tamil}
+                        </span>
+                        <span className="text-[9px] text-slate-500 font-mono hidden sm:inline">
+                          {signDef.eng.split(' ')[0]}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {isLagnaHouse && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                          Lagna
+                        </span>
+                      )}
+                      <span
+                        className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                          isLagnaHouse
+                            ? 'bg-cyan-500 text-slate-950 font-extrabold'
+                            : isAspectedTarget
+                            ? 'bg-purple-500 text-white shadow-sm'
+                            : 'bg-slate-800 text-slate-300'
+                        }`}
+                        title={`House ${houseNum} relative to Lagna`}
+                      >
+                        H{houseNum}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Aspected Target Notification Badge */}
+                  {isAspectedTarget && (
+                    <div className="mt-1 px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-400/30 text-[9px] text-purple-200 font-bold flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Target className="w-2.5 h-2.5 text-purple-300" />
+                        {aspectInfo?.aspectType}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* DUAL LAYER PLANETARY BADGES */}
+                  <div className="my-auto py-1 space-y-1 overflow-y-auto max-h-[140px] pr-0.5">
+                    {/* BASE LAYER: NATAL BIRTH PLANETS */}
+                    {natalOccupants.map(natalP => {
+                      const isSelected =
+                        activeRaycast?.layer === 'natal' &&
+                        activeRaycast?.name === natalP.body_name &&
+                        activeRaycast?.sourceSignIndex === signDef.index;
+
+                      return (
+                        <button
+                          key={`natal-${natalP.body_name}`}
+                          onClick={e =>
+                            handlePlanetClick(e, natalP.body_name, signDef.index, signDef.eng, 'natal')
+                          }
+                          className={`w-full text-left text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded flex items-center justify-between transition group ${
+                            isSelected
+                              ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                              : natalP.body_name === 'Lagna'
+                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30'
+                              : 'bg-slate-800 text-amber-300 border border-amber-500/30 hover:bg-amber-500/10 hover:border-amber-400'
+                          }`}
+                          title={`Natal ${natalP.body_name} in ${signDef.eng} (Click to raycast Graha Drishti)`}
+                        >
+                          <span className="flex items-center gap-1 truncate">
+                            <span className="text-[10px] text-amber-400">●</span>
+                            <span>{natalP.body_name}</span>
+                          </span>
+                          <span className="text-[9px] opacity-80 font-mono ml-1">
+                            {natalP.is_retrograde && (
+                              <span className="text-rose-400 mr-1" title="Retrograde">
+                                (R)
+                              </span>
+                            )}
+                            {natalP.degree_sputa ? natalP.degree_sputa.split(' ')[0] : ''}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {/* OVERLAY LAYER: TRANSITING PLANETS (GOCHARA) */}
+                    {currentTransitsInSign.map(transitP => {
+                      const isSelected =
+                        activeRaycast?.layer === 'transit' &&
+                        activeRaycast?.name === transitP.graha_key &&
+                        activeRaycast?.sourceSignIndex === signDef.index;
+
+                      return (
+                        <button
+                          key={`transit-${transitP.graha_key}`}
+                          onClick={e =>
+                            handlePlanetClick(e, transitP.graha_key, signDef.index, signDef.eng, 'transit')
+                          }
+                          className={`w-full text-left text-[10px] sm:text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center justify-between transition ${
+                            isSelected
+                              ? 'bg-cyan-400 text-slate-950 font-bold ring-2 ring-cyan-300'
+                              : 'bg-cyan-950/40 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-900/40 hover:border-cyan-400'
+                          }`}
+                          title={`[Tr] Transit ${transitP.graha_name} at ${transitP.degree_sputa} (Click to raycast Graha Drishti)`}
+                        >
+                          <span className="flex items-center gap-1 truncate">
+                            <span className="text-[9px] px-1 rounded bg-cyan-500/20 text-cyan-200 font-mono">
+                              Tr
+                            </span>
+                            <span className="truncate">{transitP.graha_key}</span>
+                          </span>
+                          <span className="text-[9px] font-mono text-cyan-200/90 ml-1">
+                            {transitP.is_retrograde && (
+                              <span className="text-rose-400 mr-1" title="Retrograde">
+                                (R)
+                              </span>
+                            )}
+                            {transitP.degree_sputa}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {/* Empty cell indicator */}
+                    {natalOccupants.length === 0 && currentTransitsInSign.length === 0 && (
+                      <div className="text-[10px] text-slate-600 italic text-center py-2">
+                        No Grahas
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CELL FOOTER: Rashi Lord */}
+                  <div className="pt-1 border-t border-slate-800/40 flex items-center justify-between text-[9px] text-slate-400">
+                    <span className="truncate">Lord: {signDef.lord.split(' ')[0]}</span>
+                    <span className="text-slate-500">{signDef.symbol}</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Raycaster Explanation Info Box */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-2">
+        <div className="flex items-center gap-2 font-bold text-white">
+          <ShieldCheck className="w-4 h-4 text-amber-400" />
+          <span>Milestone 1 Vedic Foundation Verified</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-amber-400 font-semibold block mb-0.5">1. South Indian Spatial Layout</span>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Traditional 12 signs clockwise geometry with Aries, Taurus, Gemini, etc., and archetypal zodiac icons (🏹 Archer, 🐐 Sea-Goat, 🏺 Water Pot, 🐟 Fishes).
+            </p>
+          </div>
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-cyan-400 font-semibold block mb-0.5">2. Dual-Layer Overlay</span>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Solid gold badges for Natal permanent placements overlaid with real-time semi-transparent cyan badges for monthly Gochara transits.
+            </p>
+          </div>
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-purple-400 font-semibold block mb-0.5">3. Graha Drishti Raycaster</span>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Interactive planetary click targets: Saturn (3, 7, 10), Mars (4, 7, 8), Jupiter (5, 7, 9), Rahu/Ketu (5, 7, 9), and all Grahas (7).
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
