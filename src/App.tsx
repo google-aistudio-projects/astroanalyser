@@ -115,8 +115,19 @@ export default function App() {
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-lg shadow-inner">
-              ௐ
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 shadow-inner"
+              title="Lord Muruga's Sacred Vel (Spear)"
+            >
+              <span className="text-amber-400 font-bold text-lg leading-none">ௐ</span>
+              {/* Sacred Vel of Lord Murugan (Spear) */}
+              <svg
+                viewBox="0 0 24 24"
+                className="w-5 h-5 text-amber-400 fill-current drop-shadow"
+              >
+                {/* Elegant Vel Spear: Broad Leaf Head with Central Spine and Shaft */}
+                <path d="M12 2 C10 6 7 9 7 13 C7 15.5 9 17 11 17.5 L11 22 L13 22 L13 17.5 C15 17 17 15.5 17 13 C17 9 14 6 12 2 Z M12 5 C13 7.5 14.5 10 14.5 13 C14.5 14.5 13.5 15.5 12 15.8 C10.5 15.5 9.5 14.5 9.5 13 C9.5 10 11 7.5 12 5 Z" />
+              </svg>
             </div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
@@ -582,11 +593,6 @@ export default function App() {
           <MonthlyTransitView personId={apiPersonId || '001ME'} />
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-800 bg-slate-900/60 py-4 text-center text-xs text-slate-500">
-        Vedic Astrology Data Engineering Engine &bull; Compliant with PostgreSQL Schema specification &bull; Reg.No. 001ME
-      </footer>
     </div>
   );
 }

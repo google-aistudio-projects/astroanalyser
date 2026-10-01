@@ -15,11 +15,16 @@ import {
   RotateCcw,
   Calendar as CalendarIcon,
   Clock,
-  Zap
+  Zap,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
+  Check
 } from 'lucide-react';
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
 import { getVimshottariDashaForDate, DynamicDashaHierarchy } from '../data/dashaCalculator';
+import { AstroRule, DEFAULT_RULES, evaluateHouseActivations, HouseActivationResult } from '../data/ruleEngine';
 
 /**
  * Maps a Planet / Lord to its traditional sign indices (1 = Aries .. 12 = Pisces)
@@ -193,6 +198,53 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
   const pdLordOwnedSigns = useMemo(() => {
     return getLordOwnedSigns(activeDashaHierarchy.pratyantardasha);
   }, [activeDashaHierarchy.pratyantardasha]);
+
+  // Astrological Rule Engine configuration state
+  const [rules, setRules] = useState<AstroRule[]>(DEFAULT_RULES);
+  const [showRuleConfig, setShowRuleConfig] = useState<boolean>(true);
+
+  // Compute House Activation Scores across the 12 houses
+  const houseActivations = useMemo(() => {
+    const transitWithAspects = transitPlacements.map(tp => ({
+      graha_key: tp.graha_key,
+      transit_rashi_index: tp.transit_rashi_index,
+      aspect_targets: calculateGrahaDrishti(tp.transit_rashi_index, tp.graha_key).map(a => a.targetSignIndex)
+    }));
+
+    const natalSimple = natalD1Placements.map(np => {
+      const signMeta = SOUTH_INDIAN_SIGNS.find(s => {
+        const norm = np.rashi_name.toLowerCase();
+        return s.eng.toLowerCase().includes(norm) || norm.includes(s.tamil);
+      });
+      return {
+        body_name: np.body_name,
+        rashi_index: signMeta ? signMeta.index : 9
+      };
+    });
+
+    return evaluateHouseActivations(rules, {
+      natalLagnaIdx,
+      natalRashiIdx,
+      activePdLord: activeDashaHierarchy.pratyantardasha,
+      activeAdLord: activeDashaHierarchy.antardasha,
+      activeMdLord: activeDashaHierarchy.mahadasha,
+      pdLordOwnedSigns,
+      transitPlanets: transitWithAspects,
+      natalPlanets: natalSimple
+    });
+  }, [rules, transitPlacements, natalD1Placements, activeDashaHierarchy, pdLordOwnedSigns]);
+
+  const handleToggleRule = (ruleId: string) => {
+    setRules(prev => prev.map(r => r.id === ruleId ? { ...r, isEnabled: !r.isEnabled } : r));
+  };
+
+  const handleWeightChange = (ruleId: string, newWeight: number) => {
+    setRules(prev => prev.map(r => r.id === ruleId ? { ...r, weight: newWeight } : r));
+  };
+
+  const handleResetRules = () => {
+    setRules(DEFAULT_RULES);
+  };
 
   // Timeline Navigation Handlers
   const handlePrevMonth = () => {
@@ -533,8 +585,17 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                       key={`center-${rowIdx}-${colIdx}`}
                       className="col-span-2 row-span-2 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-5 text-center shadow-inner relative overflow-hidden"
                     >
-                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-2xl shadow-inner mb-2">
-                        ௐ
+                      <div
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 shadow-inner mb-2"
+                        title="Lord Muruga's Sacred Vel (Spear)"
+                      >
+                        <span className="text-amber-400 font-bold text-2xl leading-none">ௐ</span>
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="w-6 h-6 text-amber-400 fill-current drop-shadow"
+                        >
+                          <path d="M12 2 C10 6 7 9 7 13 C7 15.5 9 17 11 17.5 L11 22 L13 22 L13 17.5 C15 17 17 15.5 17 13 C17 9 14 6 12 2 Z M12 5 C13 7.5 14.5 10 14.5 13 C14.5 14.5 13.5 15.5 12 15.8 C10.5 15.5 9.5 14.5 9.5 13 C9.5 10 11 7.5 12 5 Z" />
+                        </svg>
                       </div>
                       <div className="text-base sm:text-lg font-bold text-white tracking-tight">
                         D1 இராசி சக்கரம்
@@ -590,16 +651,22 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                 currentTransitsInSign.some(p => p.graha_key.toLowerCase().includes(pdLordShort));
               const isPdLordFocus = isPdLordRulership || isPdLordOccupied;
 
+              // Event Activation Result for this house
+              const houseActivation = houseActivations.find(ha => ha.signIndex === signDef.index);
+              const isEventEmitting = !!houseActivation?.isEventActive;
+
               return (
                 <div
                   key={`cell-${rowIdx}-${colIdx}`}
-                  className={`relative rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-200 border ${
+                  className={`relative rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-300 border ${
                     isAspectedTarget
                       ? 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/10'
                       : isAspectSource
                       ? 'border-amber-400 bg-amber-950/20 ring-2 ring-amber-400/40'
+                      : isEventEmitting
+                      ? 'border-amber-400 bg-gradient-to-br from-amber-950/40 to-slate-900/90 ring-2 ring-amber-400/80 shadow-xl shadow-amber-500/20 animate-pulse'
                       : isPdLordFocus
-                      ? 'border-amber-500/80 bg-amber-950/25 ring-2 ring-amber-400/50 shadow-md shadow-amber-500/10'
+                      ? 'border-amber-500/70 bg-amber-950/20 ring-1 ring-amber-400/40 shadow-md shadow-amber-500/10'
                       : isLagnaHouse
                       ? 'border-cyan-500/60 bg-cyan-950/25 ring-1 ring-cyan-500/30'
                       : 'border-slate-800/90 bg-slate-900/60 hover:border-slate-700'
@@ -627,7 +694,16 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                           Lagna
                         </span>
                       )}
-                      {isPdLordFocus && (
+                      {isEventEmitting && (
+                        <span
+                          className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 shadow-sm flex items-center gap-0.5"
+                          title={`Life Event Emitting House (Score: ${houseActivation?.totalScore})\n${houseActivation?.matchedRules.map(r => `• ${r.ruleName}: ${r.reason}`).join('\n')}`}
+                        >
+                          <Sparkles className="w-2.5 h-2.5 text-slate-950" />
+                          Event ({houseActivation?.totalScore})
+                        </span>
+                      )}
+                      {!isEventEmitting && isPdLordFocus && (
                         <span
                           className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5"
                           title={`Active PD Lord (${activeDashaHierarchy.pratyantardasha}) ${isPdLordRulership ? 'Rulership House' : 'Occupation'}`}
@@ -642,11 +718,13 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                             ? 'bg-cyan-500 text-slate-950 font-extrabold'
                             : isAspectedTarget
                             ? 'bg-purple-500 text-white shadow-sm'
+                            : isEventEmitting
+                            ? 'bg-amber-400 text-slate-950 font-extrabold'
                             : isPdLordFocus
                             ? 'bg-amber-500 text-slate-950 font-bold'
                             : 'bg-slate-800 text-slate-300'
                         }`}
-                        title={`House ${houseNum} relative to Lagna`}
+                        title={`House ${houseNum} relative to Lagna (Activation Score: ${houseActivation?.totalScore || 0})`}
                       >
                         H{houseNum}
                       </span>
@@ -759,6 +837,156 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
             })
           )}
         </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* PERSISTED ASTROLOGICAL RULE ENGINE CONFIGURATOR (MILESTONE 3) */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shadow-inner">
+              <Sliders className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  Astrological Rule Engine & Event Emission Weights
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  Milestone 3 Live
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Declarative Vedic rules scoring monthly house activation. Houses reaching score &ge; 0.55 pulse with life-event indicators.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleResetRules}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+              title="Reset weights and toggles to standard defaults"
+            >
+              Reset to Defaults
+            </button>
+            <button
+              onClick={() => setShowRuleConfig(!showRuleConfig)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 transition shadow-sm"
+            >
+              {showRuleConfig ? (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>Hide Rules</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Configure Rules</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Live Activated Houses Summary Pill Strip */}
+        <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span className="font-semibold text-slate-200">
+              Active Event Houses for {MONTH_NAMES[selectedMonth]} {selectedYear}:
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {houseActivations.filter(h => h.isEventActive).length > 0 ? (
+              houseActivations
+                .filter(h => h.isEventActive)
+                .map(act => {
+                  const sDef = SOUTH_INDIAN_SIGNS.find(s => s.index === act.signIndex);
+                  return (
+                    <span
+                      key={act.signIndex}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold flex items-center gap-1.5"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      <span>House {act.houseNumber} ({sDef?.tamil} - {sDef?.eng.split(' ')[0]})</span>
+                      <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-extrabold text-[10px]">
+                        {act.totalScore}
+                      </span>
+                    </span>
+                  );
+                })
+            ) : (
+              <span className="text-slate-400 italic text-[11px]">
+                No houses currently reach the &ge; 0.55 activation threshold. Increase weights below to test sensitive triggers.
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Expandable Rules Grid */}
+        {showRuleConfig && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {rules.map(rule => (
+              <div
+                key={rule.id}
+                className={`p-3.5 rounded-xl border transition ${
+                  rule.isEnabled
+                    ? 'bg-slate-950 border-slate-800'
+                    : 'bg-slate-950/40 border-slate-900 opacity-60'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-200">{rule.name}</span>
+                      <span className="px-1.5 py-0.2 rounded text-[10px] uppercase font-bold bg-slate-800 text-slate-400">
+                        {rule.category}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-snug">
+                      {rule.description}
+                    </p>
+                  </div>
+
+                  {/* Toggle */}
+                  <button
+                    onClick={() => handleToggleRule(rule.id)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      rule.isEnabled ? 'bg-amber-500' : 'bg-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-slate-950 shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        rule.isEnabled ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Weight Slider */}
+                <div className="flex items-center gap-3 pt-2 border-t border-slate-800/60 text-xs">
+                  <span className="text-slate-400 text-[11px]">Influence Weight:</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    disabled={!rule.isEnabled}
+                    value={rule.weight}
+                    onChange={e => handleWeightChange(rule.id, parseFloat(e.target.value))}
+                    className="flex-1 accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                  <span className="font-mono text-xs font-bold text-amber-400 w-10 text-right">
+                    {rule.weight.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
