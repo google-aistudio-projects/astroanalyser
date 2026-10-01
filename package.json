@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "node scripts/start-all.js",
     "dev": "vite --port=3000 --host=0.0.0.0",
     "dev:all": "node scripts/start-all.js",
     "start:all": "node scripts/start-all.js",

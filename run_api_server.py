@@ -789,6 +789,7 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
 def run_server(port: int = 5000):
     cfg = load_config()
     server_address = (cfg.get("api_host", "0.0.0.0"), port)
+    HTTPServer.allow_reuse_address = True
     httpd = HTTPServer(server_address, HoroscopeApiHandler)
     print("=" * 75)
     print(f" 🚀 VEDIC ASTROLOGY REST API SERVER STARTED (NATAL + TRANSIT)")

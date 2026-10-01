@@ -1,0 +1,93 @@
+/**
+ * Types & Interfaces for Astro Engine Multi-LLM Reasoning System (Milestone M4)
+ */
+
+export type LLMProviderId = 'local_qwen' | 'gemini_pro' | 'claude';
+
+export interface LLMProviderConfig {
+  id: LLMProviderId;
+  name: string;
+  badgeLabel: string;
+  model: string;
+  description: string;
+  endpoint?: string;
+}
+
+export const LLM_PROVIDERS: Record<LLMProviderId, LLMProviderConfig> = {
+  local_qwen: {
+    id: 'local_qwen',
+    name: 'Local Qwen 2.5 14B',
+    badgeLabel: '🖥️ Local (Qwen 2.5 14B via Ollama)',
+    model: 'qwen2.5:14b-instruct',
+    description: 'Local on-premise execution via Ollama (port 11434). Zero cloud latency, complete privacy.',
+    endpoint: 'http://localhost:11434/api/generate'
+  },
+  gemini_pro: {
+    id: 'gemini_pro',
+    name: 'Google Gemini Pro',
+    badgeLabel: '♊ Google Gemini Pro (gemini-3.1-pro)',
+    model: 'gemini-3.1-pro-preview',
+    description: 'Google DeepMind flagship multimodal reasoning model with deep Vedic synthesis capabilities.'
+  },
+  claude: {
+    id: 'claude',
+    name: 'Anthropic Claude',
+    badgeLabel: '🧠 Anthropic Claude (claude-3-5-sonnet)',
+    model: 'claude-3-5-sonnet-20241022',
+    description: 'Anthropic state-of-the-art reasoning model for nuanced astrological timing breakdowns.'
+  }
+};
+
+export interface VedicHouseContext {
+  houseNumber: number;
+  rashiIndex: number;
+  rashiName: string;
+  tamilName: string;
+  isLagna: boolean;
+  activationScore: number;
+  isEventActive: boolean;
+  matchedRules: Array<{
+    ruleId: string;
+    ruleName: string;
+    weight: number;
+    reason: string;
+  }>;
+  natalOccupants: Array<{
+    body_name: string;
+    degree_sputa?: string;
+    nakshatra_name?: string;
+  }>;
+  transitOccupants: Array<{
+    graha_key: string;
+    degree_sputa?: string;
+    nakshatra_name?: string;
+    is_retrograde?: boolean;
+  }>;
+  activeDasha: {
+    mahadasha: string;
+    antardasha: string;
+    pratyantardasha: string;
+    startDate: string;
+    endDate: string;
+  };
+  selectedMonth: number; // 0..11
+  selectedYear: number;
+  userQuery?: string;
+}
+
+export interface LLMThreePartNarrative {
+  part1_probabilityAndScope: string;
+  part2_financialAndResources: string;
+  part3_microTimingWindow: string;
+  summarySentence: string;
+  overallConfidence: number;
+  peakDateRange: string;
+  rawMarkdown: string;
+  providerUsed: LLMProviderId;
+  executionTimeMs: number;
+}
+
+export interface ILLMAdapter {
+  id: LLMProviderId;
+  generateReasoning(context: VedicHouseContext): Promise<LLMThreePartNarrative>;
+}

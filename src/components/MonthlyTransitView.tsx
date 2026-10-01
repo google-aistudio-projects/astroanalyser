@@ -19,12 +19,17 @@ import {
   Sliders,
   ChevronDown,
   ChevronUp,
-  Check
+  Check,
+  Bot,
+  Volume2,
+  Mic
 } from 'lucide-react';
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
 import { getVimshottariDashaForDate, DynamicDashaHierarchy } from '../data/dashaCalculator';
 import { AstroRule, DEFAULT_RULES, evaluateHouseActivations, HouseActivationResult } from '../data/ruleEngine';
+import { AudioVoiceInspector } from './AudioVoiceInspector';
+import { LLMProviderId, LLM_PROVIDERS, VedicHouseContext } from '../services/llm/types';
 
 /**
  * Maps a Planet / Lord to its traditional sign indices (1 = Aries .. 12 = Pisces)
@@ -257,6 +262,74 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     setRules(DEFAULT_RULES);
   };
 
+  // Milestone M4: Multi-LLM Provider & Audio Voice Inspector States
+  const [selectedLlmProvider, setSelectedLlmProvider] = useState<LLMProviderId>('local_qwen');
+  const [inspectorHouseContext, setInspectorHouseContext] = useState<VedicHouseContext | null>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
+
+  const handleOpenHouseInspector = (signIndex: number) => {
+    const signDef = SOUTH_INDIAN_SIGNS.find(s => s.index === signIndex);
+    if (!signDef) return;
+
+    const houseNum = ((signIndex - natalLagnaIdx + 12) % 12) + 1;
+    const isLagnaHouse = signIndex === natalLagnaIdx;
+
+    const natalOccupants = natalD1Placements.filter(p => {
+      const norm = p.rashi_name.toLowerCase();
+      const signNorm = signDef.eng.toLowerCase();
+      return signNorm.includes(norm) || norm.includes(signDef.tamil);
+    });
+
+    const currentTransitsInSign = transitPlacements.filter(
+      tp => tp.transit_rashi_index === signDef.index
+    );
+
+    const houseActivation = houseActivations.find(ha => ha.signIndex === signDef.index);
+
+    const ctx: VedicHouseContext = {
+      houseNumber: houseNum,
+      rashiIndex: signIndex,
+      rashiName: signDef.eng.split(' ')[0],
+      tamilName: signDef.tamil,
+      isLagna: isLagnaHouse,
+      activationScore: houseActivation?.totalScore || 0,
+      isEventActive: !!houseActivation?.isEventActive,
+      matchedRules: (houseActivation?.matchedRules || []).map(r => ({
+        ruleId: r.ruleId,
+        ruleName: r.ruleName,
+        weight: r.weight,
+        reason: r.reason
+      })),
+      natalOccupants: natalOccupants.map(o => ({
+        body_name: o.body_name,
+        degree_sputa: o.degree_sputa,
+        nakshatra_name: o.nakshatra_name
+      })),
+      transitOccupants: currentTransitsInSign.map(t => ({
+        graha_key: t.graha_key,
+        degree_sputa: t.degree_sputa,
+        nakshatra_name: t.graha_pada_chara?.nakshatra_name,
+        is_retrograde: t.is_retrograde
+      })),
+      activeDasha: activeDashaHierarchy,
+      selectedMonth,
+      selectedYear
+    };
+
+    setInspectorHouseContext(ctx);
+    setIsInspectorOpen(true);
+  };
+
+  const handleOpenTopEventInspector = () => {
+    const sorted = [...houseActivations].sort((a, b) => b.totalScore - a.totalScore);
+    const top = sorted[0];
+    if (top) {
+      handleOpenHouseInspector(top.signIndex);
+    } else {
+      handleOpenHouseInspector(natalLagnaIdx);
+    }
+  };
+
   // Timeline Navigation Handlers
   const handlePrevMonth = () => {
     if (selectedMonth === 0) {
@@ -365,8 +438,39 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
             </div>
           </div>
 
-          {/* Menu Controls: PD Micro-Focus Slider & Jump to Today */}
+          {/* Menu Controls: Multi-LLM Selector, PD Micro-Focus Slider & Jump to Today */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Multi-LLM Provider Selector (SRS Component 4) */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 shadow-inner">
+              <Bot className="w-3.5 h-3.5 text-amber-400" />
+              <select
+                value={selectedLlmProvider}
+                onChange={(e) => setSelectedLlmProvider(e.target.value as LLMProviderId)}
+                className="bg-transparent text-[11px] font-semibold text-slate-200 focus:outline-none cursor-pointer pr-1"
+                title="Select Multi-LLM Reasoning Engine Provider"
+              >
+                <option value="local_qwen" className="bg-slate-900 text-white">
+                  🖥️ Local (Qwen 2.5 14B via Ollama)
+                </option>
+                <option value="gemini_pro" className="bg-slate-900 text-white">
+                  ♊ Google Gemini Pro (gemini-3.1-pro)
+                </option>
+                <option value="claude" className="bg-slate-900 text-white">
+                  🧠 Anthropic Claude (claude-3-5-sonnet)
+                </option>
+              </select>
+            </div>
+
+            {/* Quick Open Audio Voice Inspector Button */}
+            <button
+              onClick={handleOpenTopEventInspector}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 transition shadow-sm font-bold text-xs"
+              title="Open Multi-LLM Audio Voice Inspector for Top Active House"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+              <span>Voice Inspector</span>
+            </button>
+
             {/* PD Micro-Focus Mode Slider */}
             <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 shadow-inner">
               <div className="flex flex-col text-right">
@@ -788,6 +892,18 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                       >
                         H{houseNum}
                       </span>
+
+                      {/* Audio Voice Inspector Trigger Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenHouseInspector(signDef.index);
+                        }}
+                        className="p-1 rounded bg-slate-800/80 hover:bg-amber-400 hover:text-slate-950 text-slate-400 transition"
+                        title={`Inspect House ${houseNum} (${signDef.eng.split(' ')[0]}) with ${LLM_PROVIDERS[selectedLlmProvider].name} Audio Voice`}
+                      >
+                        <Volume2 className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
 
@@ -1048,6 +1164,15 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
           </div>
         )}
       </div>
+
+      {/* Audio Voice Inspector Modal / Drawer (Milestone M4) */}
+      <AudioVoiceInspector
+        isOpen={isInspectorOpen}
+        onClose={() => setIsInspectorOpen(false)}
+        context={inspectorHouseContext}
+        activeProvider={selectedLlmProvider}
+        onChangeProvider={setSelectedLlmProvider}
+      />
     </div>
   );
 };
