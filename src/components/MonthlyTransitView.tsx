@@ -199,6 +199,17 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     return getLordOwnedSigns(activeDashaHierarchy.pratyantardasha);
   }, [activeDashaHierarchy.pratyantardasha]);
 
+  // Signs aspected by the transiting PD Lord in Gochara
+  const pdLordTransitAspectTargets = useMemo(() => {
+    const pdShort = activeDashaHierarchy.pratyantardasha.split(' ')[0].toLowerCase();
+    const pdTransit = transitPlacements.find(tp => tp.graha_key.toLowerCase().includes(pdShort));
+    if (!pdTransit) return [];
+    return calculateGrahaDrishti(pdTransit.transit_rashi_index, pdTransit.graha_key).map(a => a.targetSignIndex);
+  }, [activeDashaHierarchy.pratyantardasha, transitPlacements]);
+
+  // PD Micro-Focus Slider Mode (OFF = Standard All Houses, ON = Focus on PD Lord Domain)
+  const [isMicroPdFocus, setIsMicroPdFocus] = useState<boolean>(false);
+
   // Astrological Rule Engine configuration state
   const [rules, setRules] = useState<AstroRule[]>(DEFAULT_RULES);
   const [showRuleConfig, setShowRuleConfig] = useState<boolean>(true);
@@ -354,8 +365,37 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
             </div>
           </div>
 
-          {/* Quick Jump to Today Button */}
-          <div className="flex items-center gap-2">
+          {/* Menu Controls: PD Micro-Focus Slider & Jump to Today */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* PD Micro-Focus Mode Slider */}
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 shadow-inner">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center justify-end gap-1">
+                  <Zap className={`w-3 h-3 ${isMicroPdFocus ? 'text-amber-400 animate-pulse' : 'text-slate-500'}`} />
+                  PD Micro Focus
+                </span>
+                <span className={`text-[10px] font-semibold ${isMicroPdFocus ? 'text-amber-300 font-bold' : 'text-slate-500'}`}>
+                  {isMicroPdFocus ? 'Active Focus On' : 'Standard View'}
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isMicroPdFocus}
+                onClick={() => setIsMicroPdFocus(!isMicroPdFocus)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isMicroPdFocus ? 'bg-amber-500 shadow-lg shadow-amber-500/30' : 'bg-slate-800'
+                }`}
+                title="Toggle PD Micro Focus: Spotlights houses governed by the active PD Lord, while keeping other houses subtly aside"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-950 shadow-md ring-0 transition duration-200 ease-in-out ${
+                    isMicroPdFocus ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
             {!isCurrentMonth && (
               <button
                 onClick={handleResetToCurrent}
@@ -366,7 +406,7 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               </button>
             )}
             <div className="text-right text-[11px] font-mono text-slate-400 hidden sm:block">
-              Ephemeris Date: <span className="text-amber-400 font-bold">{activeDateIsoStr}</span>
+              Ephemeris: <span className="text-amber-400 font-bold">{activeDateIsoStr}</span>
             </div>
           </div>
         </div>
@@ -554,10 +594,33 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
           </div>
         </div>
       ) : (
-        <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl px-4 py-2.5 text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2">
+        <div
+          className={`rounded-xl px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2 border transition ${
+            isMicroPdFocus
+              ? 'bg-amber-950/40 border-amber-500/50 text-amber-200 shadow-md shadow-amber-500/10'
+              : 'bg-slate-900/50 border-slate-800/80 text-slate-400'
+          }`}
+        >
           <span className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-slate-500" />
-            Select any planet badge (e.g. <strong>Saturn</strong>, <strong>Jupiter</strong>, or <strong>Mars</strong>) to raycast and highlight its aspected houses (Graha Drishti).
+            {isMicroPdFocus ? (
+              <>
+                <Zap className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>
+                  <strong>PD Micro Focus Active:</strong> Spotlight on houses governed by{' '}
+                  <strong className="text-amber-300 underline underline-offset-2">
+                    {activeDashaHierarchy.pratyantardasha}
+                  </strong>{' '}
+                  (Rulership, Occupation &amp; Drishti). Other houses are kept aside with details intact.
+                </span>
+              </>
+            ) : (
+              <>
+                <Info className="w-4 h-4 text-slate-500" />
+                <span>
+                  Select any planet badge (e.g. <strong>Saturn</strong>, <strong>Jupiter</strong>, or <strong>Mars</strong>) to raycast and highlight its aspected houses (Graha Drishti).
+                </span>
+              </>
+            )}
           </span>
           <div className="flex items-center gap-2.5 text-[11px]">
             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
@@ -583,8 +646,10 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                   return (
                     <div
                       key={`center-${rowIdx}-${colIdx}`}
-                      className="col-span-2 row-span-2 bg-slate-950/60 border border-slate-800/80 rounded-xl shadow-inner"
-                    />
+                      className="col-span-2 row-span-2 rounded-xl border-2 border-slate-700/70 bg-slate-900/30 p-2.5 sm:p-3.5 shadow-inner flex items-center justify-center"
+                    >
+                      <div className="w-full h-full rounded-lg border border-slate-700/50 bg-slate-950/50 shadow-inner" />
+                    </div>
                   );
                 }
                 return null;
@@ -615,34 +680,46 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               const isAspectSource = activeRaycast?.sourceSignIndex === signDef.index;
               const isAspectedTarget = !!aspectInfo && !isAspectSource;
 
-              // PD Lord Activation (Rulership or Occupation)
+              // PD Lord Activation (Rulership, Natal Occupation, Transit Occupation, or Transit Drishti)
               const isPdLordRulership = pdLordOwnedSigns.includes(signDef.index);
               const pdLordShort = activeDashaHierarchy.pratyantardasha.split(' ')[0].toLowerCase();
               const isPdLordOccupied =
                 natalOccupants.some(p => p.body_name.toLowerCase().includes(pdLordShort)) ||
                 currentTransitsInSign.some(p => p.graha_key.toLowerCase().includes(pdLordShort));
-              const isPdLordFocus = isPdLordRulership || isPdLordOccupied;
+              const isPdLordAspected = pdLordTransitAspectTargets.includes(signDef.index);
+              const isPdLordFocus = isPdLordRulership || isPdLordOccupied || isPdLordAspected;
 
               // Event Activation Result for this house
               const houseActivation = houseActivations.find(ha => ha.signIndex === signDef.index);
               const isEventEmitting = !!houseActivation?.isEventActive;
 
+              // PD Micro-Focus Slider States
+              const isSpotlighted = isMicroPdFocus && isPdLordFocus;
+              const isKeptAside = isMicroPdFocus && !isPdLordFocus && !isAspectSource && !isAspectedTarget;
+
+              let cellStyle = 'relative rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-300 border ';
+              if (isKeptAside) {
+                cellStyle += 'opacity-35 bg-slate-950/40 border-slate-900/60 hover:opacity-100 hover:border-slate-700 hover:bg-slate-900/80';
+              } else if (isSpotlighted) {
+                cellStyle += 'border-amber-400 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 ring-2 ring-amber-400/90 shadow-xl shadow-amber-500/25 scale-[1.01] z-10';
+              } else if (isAspectedTarget) {
+                cellStyle += 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/10';
+              } else if (isAspectSource) {
+                cellStyle += 'border-amber-400 bg-amber-950/20 ring-2 ring-amber-400/40';
+              } else if (isEventEmitting) {
+                cellStyle += 'border-amber-400 bg-gradient-to-br from-amber-950/40 to-slate-900/90 ring-2 ring-amber-400/80 shadow-xl shadow-amber-500/20 animate-pulse';
+              } else if (isPdLordFocus) {
+                cellStyle += 'border-amber-500/70 bg-amber-950/20 ring-1 ring-amber-400/40 shadow-md shadow-amber-500/10';
+              } else if (isLagnaHouse) {
+                cellStyle += 'border-cyan-500/60 bg-cyan-950/25 ring-1 ring-cyan-500/30';
+              } else {
+                cellStyle += 'border-slate-800/90 bg-slate-900/60 hover:border-slate-700';
+              }
+
               return (
                 <div
                   key={`cell-${rowIdx}-${colIdx}`}
-                  className={`relative rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-300 border ${
-                    isAspectedTarget
-                      ? 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/10'
-                      : isAspectSource
-                      ? 'border-amber-400 bg-amber-950/20 ring-2 ring-amber-400/40'
-                      : isEventEmitting
-                      ? 'border-amber-400 bg-gradient-to-br from-amber-950/40 to-slate-900/90 ring-2 ring-amber-400/80 shadow-xl shadow-amber-500/20 animate-pulse'
-                      : isPdLordFocus
-                      ? 'border-amber-500/70 bg-amber-950/20 ring-1 ring-amber-400/40 shadow-md shadow-amber-500/10'
-                      : isLagnaHouse
-                      ? 'border-cyan-500/60 bg-cyan-950/25 ring-1 ring-cyan-500/30'
-                      : 'border-slate-800/90 bg-slate-900/60 hover:border-slate-700'
-                  }`}
+                  className={cellStyle}
                 >
                   {/* CELL HEADER: Zodiac Symbol, Icon, Tamil Name & Relative House */}
                   <div className="flex items-center justify-between gap-1 leading-none pb-1 border-b border-slate-800/60">
@@ -666,7 +743,16 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                           Lagna
                         </span>
                       )}
-                      {isEventEmitting && (
+                      {isSpotlighted && (
+                        <span
+                          className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 shadow flex items-center gap-0.5 animate-pulse"
+                          title={`PD Micro-Focus Activated:\n• ${isPdLordRulership ? 'Rulership House' : isPdLordOccupied ? 'Occupied by PD Lord' : 'Under Direct Drishti of PD Lord'}`}
+                        >
+                          <Zap className="w-2.5 h-2.5 text-slate-950 fill-current" />
+                          PD Focus
+                        </span>
+                      )}
+                      {!isSpotlighted && isEventEmitting && (
                         <span
                           className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 shadow-sm flex items-center gap-0.5"
                           title={`Life Event Emitting House (Score: ${houseActivation?.totalScore})\n${houseActivation?.matchedRules.map(r => `• ${r.ruleName}: ${r.reason}`).join('\n')}`}
@@ -675,7 +761,7 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                           Event ({houseActivation?.totalScore})
                         </span>
                       )}
-                      {!isEventEmitting && isPdLordFocus && (
+                      {!isSpotlighted && !isEventEmitting && isPdLordFocus && (
                         <span
                           className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5"
                           title={`Active PD Lord (${activeDashaHierarchy.pratyantardasha}) ${isPdLordRulership ? 'Rulership House' : 'Occupation'}`}
@@ -690,6 +776,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                             ? 'bg-cyan-500 text-slate-950 font-extrabold'
                             : isAspectedTarget
                             ? 'bg-purple-500 text-white shadow-sm'
+                            : isSpotlighted
+                            ? 'bg-amber-400 text-slate-950 font-extrabold ring-1 ring-amber-300'
                             : isEventEmitting
                             ? 'bg-amber-400 text-slate-950 font-extrabold'
                             : isPdLordFocus
