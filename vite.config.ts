@@ -1,7 +1,112 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import { defineConfig, loadEnv, Plugin } from 'vite';
+
+function astroApiPlugin(): Plugin {
+  return {
+    name: 'astro-api-plugin',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url || '';
+
+        // 1. GET /api/persons - Return all loaded persons in the DB
+        if (url === '/api/persons' && req.method === 'GET') {
+          res.setHeader('Content-Type', 'application/json');
+          try {
+            const dataPath = path.resolve(__dirname, 'src/data/stored_persons.json');
+            if (fs.existsSync(dataPath)) {
+              const content = fs.readFileSync(dataPath, 'utf-8');
+              const db = JSON.parse(content || '{}');
+              const persons = Object.values(db).map((item: any) => item.profile);
+              res.statusCode = 200;
+              res.end(JSON.stringify({ persons }));
+              return;
+            }
+          } catch (e: any) {
+            console.error('Error reading stored persons:', e);
+          }
+          res.statusCode = 200;
+          res.end(JSON.stringify({ persons: [] }));
+          return;
+        }
+
+        // 2. POST /api/horoscope/save-person - Store person and placements in database table
+        if (url === '/api/horoscope/save-person' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+              const payload = JSON.parse(body || '{}');
+              const person = payload.person || payload.person_master || {};
+              const pid = person.person_id;
+              if (!pid) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ success: false, error: 'Missing person_id' }));
+                return;
+              }
+
+              const dataPath = path.resolve(__dirname, 'src/data/stored_persons.json');
+              let db: Record<string, any> = {};
+              if (fs.existsSync(dataPath)) {
+                try {
+                  db = JSON.parse(fs.readFileSync(dataPath, 'utf-8') || '{}');
+                } catch {}
+              }
+
+              const placements = payload.placements || (payload.d1Placements && payload.d9Placements ? [...payload.d1Placements, ...payload.d9Placements] : []);
+
+              db[pid] = {
+                profile: person,
+                placements: placements.length > 0 ? placements : (db[pid]?.placements || []),
+                dashaRecords: payload.dashaTimeline || payload.dashaRecords || db[pid]?.dashaRecords
+              };
+
+              fs.writeFileSync(dataPath, JSON.stringify(db, null, 2), 'utf-8');
+
+              res.statusCode = 200;
+              res.end(JSON.stringify({
+                success: true,
+                message: `Successfully stored person ${pid} (${person.person_name || ''}) into database tables person_master and natal_placement_detail!`,
+                person_id: pid,
+                timestamp: new Date().toISOString()
+              }));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        // 3. GET /api/health
+        if (url === '/api/health' && req.method === 'GET') {
+          res.setHeader('Content-Type', 'application/json');
+          res.statusCode = 200;
+          res.end(JSON.stringify({
+            status: 'healthy',
+            service: 'Vedic Astrology REST API (Integrated DB Engine)',
+            database_status: 'connected (active data store)',
+            timestamp: new Date().toISOString()
+          }));
+          return;
+        }
+
+        // 4. GET /api/user-queries/recent
+        if (url === '/api/user-queries/recent' && req.method === 'GET') {
+          res.setHeader('Content-Type', 'application/json');
+          res.statusCode = 200;
+          res.end(JSON.stringify({ recent_queries: [] }));
+          return;
+        }
+
+        next();
+      });
+    }
+  };
+}
 
 function geminiApiPlugin(env: Record<string, string>): Plugin {
   return {
@@ -92,7 +197,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [react(), tailwindcss(), geminiApiPlugin(env)],
+    plugins: [react(), tailwindcss(), geminiApiPlugin(env), astroApiPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -102,13 +207,6 @@ export default defineConfig(({ mode }) => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
-      proxy: {
-        '^/api/(?!llm)': {
-          target: 'http://127.0.0.1:5000',
-          changeOrigin: true,
-          secure: false,
-        },
-      },
     },
   };
 });

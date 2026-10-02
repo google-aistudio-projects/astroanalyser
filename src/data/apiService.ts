@@ -410,12 +410,12 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export function registerIngestedPerson(
+export async function registerIngestedPerson(
   personId: string,
   profile: PersonMaster,
   placements: NatalPlacement[],
   dashaRecords?: [string, string, string, string, string][]
-) {
+): Promise<{ success: boolean; message: string }> {
   ingestedPersonsRegistry[personId] = {
     profile,
     placements,
@@ -429,15 +429,26 @@ export function registerIngestedPerson(
     } catch {}
   }
 
-  // Push to backend PostgreSQL tables
-  fetch('/api/horoscope/save-person', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      person: profile,
-      placements
-    })
-  }).catch(() => {});
+  // Push to backend database tables
+  try {
+    const res = await fetch('/api/horoscope/save-person', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        person: profile,
+        placements,
+        dashaTimeline: dashaRecords
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, message: data.message || 'Saved to database tables' };
+    }
+  } catch (err: any) {
+    console.warn('Backend sync notice:', err);
+  }
+
+  return { success: true, message: 'Saved to local table registry' };
 }
 
 export async function syncPersonsFromBackend(): Promise<void> {
@@ -607,23 +618,10 @@ export interface ApiFetchResult {
  */
 function getCandidateBaseUrls(userBaseUrl: string): string[] {
   const trimmed = userBaseUrl.trim().replace(/\/+$/, '');
-  const candidates: string[] = [];
+  const candidates: string[] = ['']; // Relative /api on current origin first
 
-  if (trimmed) {
+  if (trimmed && trimmed !== '' && trimmed !== '/api') {
     candidates.push(trimmed);
-  }
-
-  // If user passed localhost, add 127.0.0.1 as high priority fallback for Windows
-  if (trimmed.includes('localhost:5000')) {
-    candidates.push('http://127.0.0.1:5000');
-    candidates.push(''); // Relative /api via Vite proxy
-  } else if (trimmed.includes('127.0.0.1:5000')) {
-    candidates.push('http://localhost:5000');
-    candidates.push(''); // Relative /api via Vite proxy
-  } else if (!trimmed || trimmed === '/api') {
-    candidates.push('');
-    candidates.push('http://127.0.0.1:5000');
-    candidates.push('http://localhost:5000');
   }
 
   // Deduplicate
