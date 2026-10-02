@@ -93,8 +93,13 @@ export function getFullVimshottariTimeline(): [string, string, string, string, s
   return intervals;
 }
 
-export function getVimshottariDashaForDate(dateStr: string): DynamicDashaHierarchy {
-  const timeline = getFullVimshottariTimeline();
+export function getVimshottariDashaForDate(
+  dateStr: string,
+  customTimeline?: [string, string, string, string, string][]
+): DynamicDashaHierarchy {
+  const timeline = customTimeline && customTimeline.length > 0
+    ? customTimeline
+    : getFullVimshottariTimeline();
   const match = timeline.find(([md, ad, pd, start, end]) => dateStr >= start && dateStr <= end);
 
   if (match) {

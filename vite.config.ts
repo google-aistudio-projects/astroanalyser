@@ -20,19 +20,20 @@ function geminiApiPlugin(env: Record<string, string>): Plugin {
         req.on('end', async () => {
           try {
             const { prompt } = JSON.parse(body || '{}');
-            const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+            const rawKey = (env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
+            const isPlaceholder = !rawKey || rawKey === 'MY_GEMINI_API_KEY' || rawKey.includes('placeholder') || rawKey.includes('your_api_key');
 
-            if (!apiKey) {
-              res.statusCode = 500;
+            if (isPlaceholder) {
+              res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({
-                error: 'GEMINI_API_KEY not configured. Add GEMINI_API_KEY to your .env file or environment variables.'
+                error: 'GEMINI_API_KEY is not configured or is a placeholder. Please set GEMINI_API_KEY="AIzaSy..." in your .env file or system environment variables. (Get a free key at https://aistudio.google.com/apikey).'
               }));
               return;
             }
 
             const { GoogleGenAI } = await import('@google/genai');
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({ apiKey: rawKey });
 
             let response;
             let usedModel = 'gemini-3.8-flash';
@@ -67,7 +68,19 @@ function geminiApiPlugin(env: Record<string, string>): Plugin {
           } catch (err: any) {
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: err.message || 'Gemini Generation Failed' }));
+            let errorMsg = err.message || 'Gemini Generation Failed';
+            try {
+              const parsed = JSON.parse(errorMsg);
+              if (parsed?.error?.message) {
+                errorMsg = parsed.error.message;
+              }
+            } catch {}
+
+            if (errorMsg.includes('API key not valid') || errorMsg.includes('API_KEY_INVALID')) {
+              errorMsg = 'Invalid Gemini API Key: Google Generative AI rejected the key with 400 INVALID_ARGUMENT. Please verify your GEMINI_API_KEY in your .env file or environment variables at https://aistudio.google.com/apikey and restart the dev server.';
+            }
+
+            res.end(JSON.stringify({ error: errorMsg }));
           }
         });
       });

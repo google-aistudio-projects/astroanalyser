@@ -349,6 +349,36 @@ export function normalizeDateString(inputVal: string, defaultToEndOfMonth: boole
   return inputVal;
 }
 
+export const samplePersonKumar: PersonMaster = {
+  person_id: "002KUMAR",
+  person_name: "Kumar (Tamil Horoscope)",
+  age: 42,
+  date_of_birth: "1984-07-18",
+  place_of_birth: "Chennai, Tamil Nadu",
+  birth_lagna: "Mesham (Aries)",
+  birth_rashi: "Rishabam (Taurus)",
+  birth_star: "Rohini (Moon Lord)",
+  birth_star_pada: 1,
+  starting_dasha_lord: "Moon (Chandra)",
+  dasha_balance_years: 7,
+  dasha_balance_months: 5,
+  dasha_balance_days: 10,
+  dasha_balance_text: "7-வருஷம் 5-மாதம் 10-நாள்"
+};
+
+export const samplePlacementsKumar: NatalPlacement[] = [
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Lagna", rashi_name: "Mesham (Aries)", house_number: 1, nakshatra_name: "Ashwini", pada: 1, degree_sputa: "02° 15'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Moon (Chandra)", rashi_name: "Rishabam (Taurus)", house_number: 2, nakshatra_name: "Rohini", pada: 1, degree_sputa: "11° 40'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Venus (Sukra)", rashi_name: "Rishabam (Taurus)", house_number: 2, nakshatra_name: "Krittika", pada: 3, degree_sputa: "04° 10'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Sun (Surya)", rashi_name: "Katakam (Cancer)", house_number: 4, nakshatra_name: "Pushya", pada: 2, degree_sputa: "02° 22'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Mercury (Budha)", rashi_name: "Simham (Leo)", house_number: 5, nakshatra_name: "Magha", pada: 3, degree_sputa: "09° 12'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Mars (Sevvai)", rashi_name: "Thulaam (Libra)", house_number: 7, nakshatra_name: "Swati", pada: 2, degree_sputa: "15° 30'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Saturn (Sani)", rashi_name: "Thulaam (Libra)", house_number: 7, nakshatra_name: "Vishakha", pada: 1, degree_sputa: "20° 45'", is_retrograde: true },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Jupiter (Guru)", rashi_name: "Dhanus (Sagittarius)", house_number: 9, nakshatra_name: "Mula", pada: 4, degree_sputa: "12° 50'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Rahu", rashi_name: "Rishabam (Taurus)", house_number: 2, nakshatra_name: "Rohini", pada: 2, degree_sputa: "14° 05'", is_retrograde: false },
+  { person_id: "002KUMAR", chart_type: "D1", body_name: "Ketu", rashi_name: "Vrischigam (Scorpio)", house_number: 8, nakshatra_name: "Anuradha", pada: 4, degree_sputa: "14° 05'", is_retrograde: false }
+];
+
 // Ingested Persons In-Memory Registry (persists parsed PDFs for REST API and Charts)
 export const ingestedPersonsRegistry: Record<string, {
   profile: PersonMaster;
@@ -359,8 +389,26 @@ export const ingestedPersonsRegistry: Record<string, {
     profile: samplePersonMaster,
     placements: sampleNatalPlacements,
     dashaRecords: ALL_DASHA_TIMELINE
+  },
+  '002KUMAR': {
+    profile: samplePersonKumar,
+    placements: samplePlacementsKumar,
+    dashaRecords: ALL_DASHA_TIMELINE
   }
 };
+
+// Restore any previously ingested persons from localStorage
+if (typeof window !== 'undefined') {
+  try {
+    const saved = localStorage.getItem('astro_persons_db');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      Object.assign(ingestedPersonsRegistry, parsed);
+    }
+  } catch (e) {
+    console.warn('Could not restore persons from storage:', e);
+  }
+}
 
 export function registerIngestedPerson(
   personId: string,
@@ -373,16 +421,70 @@ export function registerIngestedPerson(
     placements,
     dashaRecords: dashaRecords || ALL_DASHA_TIMELINE
   };
+
+  // Persist to localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('astro_persons_db', JSON.stringify(ingestedPersonsRegistry));
+    } catch {}
+  }
+
+  // Push to backend PostgreSQL tables
+  fetch('/api/horoscope/save-person', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      person: profile,
+      placements
+    })
+  }).catch(() => {});
 }
 
-export function getRegisteredPersonList(): { id: string; name: string; lagna: string; rashi: string }[] {
+export async function syncPersonsFromBackend(): Promise<void> {
+  try {
+    const res = await fetch('/api/persons');
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json.persons)) {
+        json.persons.forEach((p: any) => {
+          if (p.person_id && !ingestedPersonsRegistry[p.person_id]) {
+            ingestedPersonsRegistry[p.person_id] = {
+              profile: {
+                person_id: p.person_id,
+                person_name: p.person_name || p.person_id,
+                age: p.age || 40,
+                date_of_birth: p.date_of_birth || '1985-01-01',
+                place_of_birth: p.place_of_birth || 'Tamil Nadu, India',
+                birth_lagna: p.birth_lagna || 'Mesham (Aries)',
+                birth_rashi: p.birth_rashi || 'Rishabam (Taurus)',
+                birth_star: p.birth_star || 'Ashwini',
+                birth_star_pada: p.birth_star_pada || 1,
+                starting_dasha_lord: p.starting_dasha_lord || 'Ketu',
+                dasha_balance_years: p.dasha_balance_years || 0,
+                dasha_balance_months: p.dasha_balance_months || 0,
+                dasha_balance_days: p.dasha_balance_days || 0,
+                dasha_balance_text: p.dasha_balance_text || ''
+              },
+              placements: sampleNatalPlacements.map(pl => ({ ...pl, person_id: p.person_id })),
+              dashaRecords: ALL_DASHA_TIMELINE
+            };
+          }
+        });
+      }
+    }
+  } catch {}
+}
+
+export function getRegisteredPersonList(): { id: string; name: string; lagna: string; rashi: string; star?: string; dob?: string }[] {
   return Object.keys(ingestedPersonsRegistry).map(pid => {
     const p = ingestedPersonsRegistry[pid].profile;
     return {
       id: pid,
       name: p.person_name,
       lagna: p.birth_lagna,
-      rashi: p.birth_rashi
+      rashi: p.birth_rashi,
+      star: p.birth_star,
+      dob: p.date_of_birth
     };
   });
 }

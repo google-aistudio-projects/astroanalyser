@@ -25,11 +25,13 @@ import {
 } from 'lucide-react';
 import { PersonMaster, NatalPlacement, samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { registerIngestedPerson, ALL_DASHA_TIMELINE, ingestedPersonsRegistry } from '../data/apiService';
+import { extractPdfText, parseHoroscopeText, RASHI_ORDER } from '../services/pdfHoroscopeParser';
 import { getStarLordShort } from './RestApiStudio';
 
 interface PdfIngestionStudioProps {
   onOpenApiStudio: (personId: string) => void;
   onOpenCharts: () => void;
+  onSelectPerson?: (personId: string) => void;
   copyToClipboard: (text: string, label: string) => void;
   copied: string | null;
   downloadFile: (filename: string, content: string, type: string) => void;
@@ -38,6 +40,7 @@ interface PdfIngestionStudioProps {
 export default function PdfIngestionStudio({
   onOpenApiStudio,
   onOpenCharts,
+  onSelectPerson,
   copyToClipboard,
   copied,
   downloadFile
@@ -68,64 +71,60 @@ export default function PdfIngestionStudio({
   const [customStar, setCustomStar] = useState<string>('Anusham (Anuradha)');
   const [customPada, setCustomPada] = useState<number>(2);
 
-  // Trigger parsing animation and pipeline
-  const runExtractionPipeline = (fileName: string, sizeStr: string, personId: string, personName: string) => {
+  // Real PDF extraction pipeline
+  const runExtractionPipeline = async (file: File) => {
     setIsParsing(true);
-    setParseProgress(15);
-    setParsingStep('Reading PDF byte stream and binary metadata...');
+    setParseProgress(20);
+    setParsingStep(`Reading ${file.name} binary byte stream...`);
     setIsCommittedToDb(false);
 
-    setTimeout(() => {
-      setParseProgress(40);
-      setParsingStep('Extracting Tamil font tables, Panchanga & Page 2-3 Coordinates...');
-    }, 600);
+    try {
+      setParseProgress(45);
+      setParsingStep('Extracting raw text strings and table layout from PDF pages...');
+      const { fullText, pageCount } = await extractPdfText(file);
 
-    setTimeout(() => {
-      setParseProgress(70);
-      setParsingStep('Normalizing D1 Rashi & D9 Navamsha 4x4 Perimeter grids (Lagna = H1)...');
-    }, 1200);
+      setParseProgress(75);
+      setParsingStep('Parsing Tamil Astrology terms (Lagna, Rashi, Nakshatra, D1 & D9)...');
+      const parsed = parseHoroscopeText(fullText, file.name, pageCount);
 
-    setTimeout(() => {
       setParseProgress(90);
-      setParsingStep('Building 720-Interval Vimshottari Dasha Hierarchy (1976-2090)...');
-    }, 1800);
+      setParsingStep('Normalizing Graha placements and computing Vimshottari intervals...');
 
-    setTimeout(() => {
+      // Update form state with the real parsed values
+      setCustomPersonId(parsed.person.person_id);
+      setCustomPersonName(parsed.person.person_name);
+      setCustomDob(parsed.person.date_of_birth);
+      setCustomLagna(parsed.person.birth_lagna);
+      setCustomRashi(parsed.person.birth_rashi);
+      setCustomStar(parsed.person.birth_star);
+      setCustomPada(parsed.person.birth_star_pada);
+
+      setExtractedPerson(parsed.person);
+      const combinedPlacements = [...parsed.d1Placements, ...parsed.d9Placements];
+      setExtractedPlacements(combinedPlacements);
+
+      // Register into central registry & commit to PostgreSQL
+      registerIngestedPerson(
+        parsed.person.person_id,
+        parsed.person,
+        combinedPlacements,
+        parsed.dashaTimeline
+      );
+
       setParseProgress(100);
       setIsParsing(false);
-      setParsingStep('Parsing Complete & Committed to PostgreSQL Database Tables');
+      setParsingStep(`Parsing Complete: Parsed ${pageCount} pages and stored in Database Tables`);
       setIsCommittedToDb(true);
       setCommittedTime(new Date().toLocaleTimeString());
 
-      // Update extracted person profile
-      const newProfile: PersonMaster = {
-        person_id: personId,
-        person_name: personName,
-        age: 50,
-        date_of_birth: customDob,
-        place_of_birth: 'Tamil Nadu, India',
-        birth_lagna: customLagna,
-        birth_rashi: customRashi,
-        birth_star: customStar,
-        birth_star_pada: customPada,
-        starting_dasha_lord: 'Saturn (Sani)',
-        dasha_balance_years: 13,
-        dasha_balance_months: 2,
-        dasha_balance_days: 5,
-        dasha_balance_text: '13-வருஷம் 2-மாதம் 5-நாள் 31-நாழி 47-விநாடி'
-      };
-
-      const placementsForPerson = sampleNatalPlacements.map(p => ({
-        ...p,
-        person_id: personId
-      }));
-
-      setExtractedPerson(newProfile);
-      setExtractedPlacements(placementsForPerson);
-
-      // Register into central registry so REST API Studio & Charts can use it immediately!
-      registerIngestedPerson(personId, newProfile, placementsForPerson, ALL_DASHA_TIMELINE);
-    }, 2400);
+      if (onSelectPerson) {
+        onSelectPerson(parsed.person.person_id);
+      }
+    } catch (err: any) {
+      console.error('PDF parsing error:', err);
+      setIsParsing(false);
+      setParsingStep(`Extraction notice: ${err.message || 'Error parsing'}. You can fine-tune in the form below.`);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,13 +135,7 @@ export default function PdfIngestionStudio({
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
     setFileSize(`${sizeInMb} MB`);
 
-    // Derive a person ID from file name
-    const cleanId = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8) || '002NEW';
-    const cleanName = file.name.replace(/\.[^/.]+$/, "").slice(0, 20);
-    setCustomPersonId(cleanId);
-    setCustomPersonName(cleanName);
-
-    runExtractionPipeline(file.name, `${sizeInMb} MB`, cleanId, cleanName);
+    runExtractionPipeline(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -155,12 +148,35 @@ export default function PdfIngestionStudio({
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
     setFileSize(`${sizeInMb} MB`);
 
-    const cleanId = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8) || '002NEW';
-    const cleanName = file.name.replace(/\.[^/.]+$/, "").slice(0, 20);
-    setCustomPersonId(cleanId);
-    setCustomPersonName(cleanName);
+    runExtractionPipeline(file);
+  };
 
-    runExtractionPipeline(file.name, `${sizeInMb} MB`, cleanId, cleanName);
+  const handleCommitManualChanges = () => {
+    const updatedProfile: PersonMaster = {
+      ...extractedPerson,
+      person_id: customPersonId,
+      person_name: customPersonName,
+      date_of_birth: customDob,
+      birth_lagna: customLagna,
+      birth_rashi: customRashi,
+      birth_star: customStar,
+      birth_star_pada: customPada
+    };
+
+    const updatedPlacements = extractedPlacements.map(p => ({
+      ...p,
+      person_id: customPersonId
+    }));
+
+    registerIngestedPerson(customPersonId, updatedProfile, updatedPlacements);
+    setExtractedPerson(updatedProfile);
+    setExtractedPlacements(updatedPlacements);
+    setIsCommittedToDb(true);
+    setCommittedTime(new Date().toLocaleTimeString());
+
+    if (onSelectPerson) {
+      onSelectPerson(customPersonId);
+    }
   };
 
   const loadSample001ME = () => {
@@ -173,7 +189,12 @@ export default function PdfIngestionStudio({
     setCustomRashi('Vrischigam (Scorpio)');
     setCustomStar('Anusham (Anuradha)');
     setCustomPada(2);
-    runExtractionPipeline('001ME_Jothidar_Horoscope_54Pages.pdf', '3.4 MB', '001ME', 'ME (Reg. 001ME)');
+    setExtractedPerson(samplePersonMaster);
+    setExtractedPlacements(sampleNatalPlacements);
+    setIsCommittedToDb(true);
+    setCommittedTime(new Date().toLocaleTimeString());
+    registerIngestedPerson('001ME', samplePersonMaster, sampleNatalPlacements, ALL_DASHA_TIMELINE);
+    if (onSelectPerson) onSelectPerson('001ME');
   };
 
   // Generate SQL insert dump
@@ -335,12 +356,18 @@ COMMIT;
             </div>
 
             <button
-              onClick={() => runExtractionPipeline(selectedFileName, fileSize, customPersonId, customPersonName)}
+              onClick={() => {
+                if (fileInputRef.current?.files?.[0]) {
+                  runExtractionPipeline(fileInputRef.current.files[0]);
+                } else {
+                  fileInputRef.current?.click();
+                }
+              }}
               disabled={isParsing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 transition cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              {isParsing ? 'Re-parsing...' : 'Re-parse'}
+              {isParsing ? 'Parsing PDF...' : 'Choose / Parse PDF'}
             </button>
           </div>
         </div>
@@ -413,22 +440,35 @@ COMMIT;
           {/* Quick Action Navigation */}
           <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-slate-300">
-              Ready to query <strong>{extractedPerson.person_id}</strong>:
+              Ready in Database as <strong>{extractedPerson.person_id}</strong> ({extractedPerson.person_name}):
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {onSelectPerson && (
+                <button
+                  onClick={() => {
+                    onSelectPerson(extractedPerson.person_id);
+                    onOpenCharts();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 transition shadow-md cursor-pointer"
+                  title="Make this native active across the entire application"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Make Active Native ({extractedPerson.person_id}) &rarr;
+                </button>
+              )}
               <button
                 onClick={() => onOpenApiStudio(extractedPerson.person_id)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition"
               >
                 <Server className="w-3.5 h-3.5" />
-                Query in REST API Studio &rarr;
+                REST API &rarr;
               </button>
               <button
                 onClick={onOpenCharts}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
               >
                 <Compass className="w-3.5 h-3.5 text-amber-400" />
-                View Charts &rarr;
+                Charts &rarr;
               </button>
             </div>
           </div>
@@ -526,6 +566,106 @@ COMMIT;
               <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 text-xs text-slate-400 leading-relaxed">
                 <span className="font-bold text-amber-400">Tamil Balance Text Extracted from PDF Page 3: </span>
                 <code className="text-slate-300 font-mono">{extractedPerson.dasha_balance_text}</code>
+              </div>
+
+              {/* EDIT / FINE-TUNE FORM */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-amber-400" />
+                    Fine-Tune / Edit Extracted Native Details
+                  </span>
+                  <button
+                    onClick={handleCommitManualChanges}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Commit Changes to Database Tables
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Person ID</label>
+                    <input
+                      type="text"
+                      value={customPersonId}
+                      onChange={(e) => setCustomPersonId(e.target.value.toUpperCase())}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-amber-300 font-mono font-bold mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Person Name</label>
+                    <input
+                      type="text"
+                      value={customPersonName}
+                      onChange={(e) => setCustomPersonName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Date of Birth</label>
+                    <input
+                      type="date"
+                      value={customDob}
+                      onChange={(e) => setCustomDob(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-cyan-300 font-mono mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Birth Lagna</label>
+                    <select
+                      value={customLagna}
+                      onChange={(e) => setCustomLagna(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-emerald-400 font-bold mt-1 cursor-pointer"
+                    >
+                      {RASHI_ORDER.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Birth Rashi (Moon Sign)</label>
+                    <select
+                      value={customRashi}
+                      onChange={(e) => setCustomRashi(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-amber-300 font-bold mt-1 cursor-pointer"
+                    >
+                      {RASHI_ORDER.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Birth Star (Nakshatra)</label>
+                    <input
+                      type="text"
+                      value={customStar}
+                      onChange={(e) => setCustomStar(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium">Pada (1-4)</label>
+                    <select
+                      value={customPada}
+                      onChange={(e) => setCustomPada(parseInt(e.target.value, 10))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 mt-1 cursor-pointer"
+                    >
+                      {[1, 2, 3, 4].map(p => (
+                        <option key={p} value={p}>Pada {p}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={handleCommitManualChanges}
+                      className="w-full py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                    >
+                      Save &amp; Activate
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

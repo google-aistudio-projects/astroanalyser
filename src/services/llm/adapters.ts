@@ -425,7 +425,17 @@ ${parsed.part3_microTimingWindow}
         };
       } else {
         const errJson = await res.json().catch(() => ({}));
-        connectionError = errJson.error || `HTTP ${res.status}: ${res.statusText}`;
+        let rawErr = errJson.error || `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const parsed = JSON.parse(rawErr);
+          if (parsed?.error?.message) rawErr = parsed.error.message;
+        } catch {}
+
+        if (rawErr.includes('API key not valid') || rawErr.includes('API_KEY_INVALID')) {
+          connectionError = 'Google Gemini Error: API Key Invalid (400). Please check GEMINI_API_KEY in your .env file or Windows environment variables with a valid key from https://aistudio.google.com/apikey and restart the dev server.';
+        } else {
+          connectionError = rawErr;
+        }
       }
     } catch (err: any) {
       connectionError = err.message || 'Failed to reach /api/llm/gemini proxy';

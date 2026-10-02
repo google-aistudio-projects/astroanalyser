@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Compass,
   Calendar,
@@ -9,7 +9,8 @@ import {
   Table,
   BookOpen,
   UploadCloud,
-  Database
+  Database,
+  User
 } from 'lucide-react';
 import {
   samplePersonMaster,
@@ -18,7 +19,10 @@ import {
 import {
   executeHoroscopeTimelineQuery,
   HoroscopeApiResponse,
-  UserQueryLog
+  UserQueryLog,
+  getRegisteredPersonList,
+  syncPersonsFromBackend,
+  ingestedPersonsRegistry
 } from './data/apiService';
 import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
 import PdfIngestionStudio from './components/PdfIngestionStudio';
@@ -61,22 +65,39 @@ export default function App() {
   const [selectedChart, setSelectedChart] = useState<'D1' | 'D9'>('D1');
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Active Native Profile (Supports any person loaded in the DB)
+  const [activePersonId, setActivePersonId] = useState<string>(() => {
+    return localStorage.getItem('astro_active_person_id') || '001ME';
+  });
+
+  const [availablePersons, setAvailablePersons] = useState(() => getRegisteredPersonList());
+
+  useEffect(() => {
+    syncPersonsFromBackend().then(() => {
+      setAvailablePersons(getRegisteredPersonList());
+    });
+  }, []);
+
+  const refreshPersonsList = () => {
+    setAvailablePersons(getRegisteredPersonList());
+  };
+
   // REST API Explorer States (Model 2)
-  const [apiPersonId, setApiPersonId] = useState<string>('001ME');
+  const [apiPersonId, setApiPersonId] = useState<string>(activePersonId);
   const [apiStartDate, setApiStartDate] = useState<string>('1998-01-01');
   const [apiEndDate, setApiEndDate] = useState<string>('2020-01-31');
   const [apiResponse, setApiResponse] = useState<HoroscopeApiResponse | null>(() =>
-    executeHoroscopeTimelineQuery('001ME', '1998-01-01', '2020-01-31')
+    executeHoroscopeTimelineQuery(activePersonId, '1998-01-01', '2020-01-31')
   );
   const [queryHistory, setQueryHistory] = useState<UserQueryLog[]>([
     {
-      query_id: 'Q-001ME-001-20260928180000',
+      query_id: `Q-${activePersonId}-001-20260928180000`,
       running_number: 1,
-      person_id: '001ME',
+      person_id: activePersonId,
       start_date: '1998-01-01',
       end_date: '2020-01-31',
       created_at: new Date().toISOString(),
-      response_payload: executeHoroscopeTimelineQuery('001ME', '1998-01-01', '2020-01-31')
+      response_payload: executeHoroscopeTimelineQuery(activePersonId, '1998-01-01', '2020-01-31')
     }
   ]);
 
@@ -98,12 +119,14 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Natal placements for selected chart
+  // Natal placements for selected chart and active person
   const currentChartPlacements = useMemo(() => {
-    return sampleNatalPlacements.filter(p => p.chart_type === selectedChart);
-  }, [selectedChart]);
+    const reg = ingestedPersonsRegistry[activePersonId] || ingestedPersonsRegistry['001ME'];
+    const placements = reg?.placements || sampleNatalPlacements;
+    return placements.filter(p => p.chart_type === selectedChart);
+  }, [selectedChart, activePersonId]);
 
-  // Lagna sign index for currently selected chart
+  // Lagna sign index for currently selected chart and active person
   const lagnaPlacement = currentChartPlacements.find(p => p.body_name === 'Lagna');
   const lagnaSignIndex = lagnaPlacement
     ? SOUTH_INDIAN_CELLS.find(c => c.engSign === lagnaPlacement.rashi_name)?.signIndex || 9
@@ -130,11 +153,35 @@ export default function App() {
               </svg>
             </div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
-                Tamil Horoscope Vedic Data Ingestion Engine
+              <h1 className="text-base sm:text-lg font-bold tracking-tight text-white hidden sm:block">
+                Tamil Horoscope Vedic Engine
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                PDF 001ME Verified
+
+              {/* ACTIVE NATIVE DROPDOWN (User can choose any loaded person in the DB) */}
+              <div className="flex items-center gap-1.5 bg-slate-950/90 border border-amber-500/50 hover:border-amber-400 rounded-xl px-2.5 py-1 transition shadow-inner">
+                <User className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <select
+                  value={activePersonId}
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    setActivePersonId(newId);
+                    setApiPersonId(newId);
+                    localStorage.setItem('astro_active_person_id', newId);
+                    setApiResponse(executeHoroscopeTimelineQuery(newId, apiStartDate, apiEndDate));
+                  }}
+                  className="bg-transparent text-amber-300 font-bold text-xs focus:outline-none cursor-pointer pr-1"
+                  title="Choose native loaded in the database tables"
+                >
+                  {availablePersons.map(p => (
+                    <option key={p.id} value={p.id} className="bg-slate-900 text-white font-medium">
+                      {p.id} • {p.name} ({p.lagna.split(' ')[0]} / {p.rashi.split(' ')[0]})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <span className="hidden lg:inline-flex px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                DB Synchronized
               </span>
             </div>
           </div>
@@ -582,7 +629,14 @@ export default function App() {
                 ]);
               }, 100);
             }}
-            onOpenCharts={() => setActiveTab('charts')}
+            onOpenCharts={() => setActiveTab('monthly')}
+            onSelectPerson={(pId) => {
+              setActivePersonId(pId);
+              setApiPersonId(pId);
+              localStorage.setItem('astro_active_person_id', pId);
+              refreshPersonsList();
+              setApiResponse(executeHoroscopeTimelineQuery(pId, apiStartDate, apiEndDate));
+            }}
             copyToClipboard={copyToClipboard}
             copied={copied}
             downloadFile={downloadFile}
@@ -590,7 +644,7 @@ export default function App() {
         )}
         {/* TAB 4: MONTHLY VIEW (D1 DUAL-LAYER TRANSIT & RAYCASTER) */}
         {activeTab === 'monthly' && (
-          <MonthlyTransitView personId={apiPersonId || '001ME'} />
+          <MonthlyTransitView personId={activePersonId} />
         )}
       </main>
     </div>

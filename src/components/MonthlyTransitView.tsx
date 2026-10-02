@@ -25,11 +25,32 @@ import {
   Mic
 } from 'lucide-react';
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
+import { ingestedPersonsRegistry, ALL_DASHA_TIMELINE } from '../data/apiService';
 import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
 import { getVimshottariDashaForDate, DynamicDashaHierarchy } from '../data/dashaCalculator';
 import { AstroRule, DEFAULT_RULES, evaluateHouseActivations, HouseActivationResult } from '../data/ruleEngine';
 import { AudioVoiceInspector } from './AudioVoiceInspector';
 import { LLMProviderId, LLM_PROVIDERS, VedicHouseContext } from '../services/llm/types';
+
+export function getSignIndexFromName(signName: string, fallback = 9): number {
+  if (!signName) return fallback;
+  const s = signName.toLowerCase();
+  const signKeys = [
+    'mesham', 'rishab', 'mithun', 'katak', 'simha', 'kanni',
+    'thula', 'vrisch', 'dhanu', 'makar', 'kumbh', 'meen'
+  ];
+  for (let i = 0; i < signKeys.length; i++) {
+    if (s.includes(signKeys[i])) return i + 1;
+  }
+  const engKeys = [
+    'aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo',
+    'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces'
+  ];
+  for (let i = 0; i < engKeys.length; i++) {
+    if (s.includes(engKeys[i])) return i + 1;
+  }
+  return fallback;
+}
 
 /**
  * Maps a Planet / Lord to its traditional sign indices (1 = Aries .. 12 = Pisces)
@@ -170,14 +191,31 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     aspectTargets: { targetSignIndex: number; aspectType: string; aspectDegree: number }[];
   } | null>(null);
 
-  // Natal Lagna Sign Index (001ME = Dhanus / Sagittarius = 9)
-  const natalLagnaIdx = 9;
-  const natalRashiIdx = 8; // Vrischigam / Scorpio
+  // Dynamically resolve active person profile & placements from registry
+  const activeRecord = useMemo(() => {
+    return ingestedPersonsRegistry[personId] || ingestedPersonsRegistry['001ME'] || {
+      profile: samplePersonMaster,
+      placements: sampleNatalPlacements,
+      dashaRecords: ALL_DASHA_TIMELINE
+    };
+  }, [personId]);
 
-  // D1 Natal Placements
+  const activeProfile = activeRecord.profile;
+
+  // Natal Lagna Sign Index (1..12) dynamically derived from person's birth_lagna
+  const natalLagnaIdx = useMemo(() => {
+    return getSignIndexFromName(activeProfile.birth_lagna, 9);
+  }, [activeProfile.birth_lagna]);
+
+  // Natal Janma Rashi Index (1..12) dynamically derived from person's birth_rashi
+  const natalRashiIdx = useMemo(() => {
+    return getSignIndexFromName(activeProfile.birth_rashi, 8);
+  }, [activeProfile.birth_rashi]);
+
+  // D1 Natal Placements for this native
   const natalD1Placements = useMemo(() => {
-    return sampleNatalPlacements.filter(p => p.chart_type === 'D1');
-  }, []);
+    return activeRecord.placements.filter(p => p.chart_type === 'D1');
+  }, [activeRecord]);
 
   // Active Evaluation Date object
   const activeDate = useMemo(() => {
@@ -196,8 +234,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
 
   // Resolve Active Vimshottari Dasha Hierarchy for Selected Date dynamically
   const activeDashaHierarchy = useMemo(() => {
-    return getVimshottariDashaForDate(activeDateIsoStr);
-  }, [activeDateIsoStr]);
+    return getVimshottariDashaForDate(activeDateIsoStr, activeRecord.dashaRecords);
+  }, [activeDateIsoStr, activeRecord.dashaRecords]);
 
   // Houses ruled or occupied by the active PD Lord
   const pdLordOwnedSigns = useMemo(() => {
@@ -432,8 +470,14 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                   {isCurrentMonth ? '● Current Active Month' : isPast ? '⏪ Historical Backtest' : '⏩ Future Projection'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Navigate any 30-day window backward to 1976 or forward to 2065 to evaluate historical events and future Gochara activations.
+              <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                <span>Native: <strong className="text-amber-300">{activeProfile.person_name}</strong> ({activeProfile.person_id})</span>
+                <span className="text-slate-600">&bull;</span>
+                <span>Lagna: <strong className="text-amber-400">{activeProfile.birth_lagna.split(' ')[0]} (H1)</strong></span>
+                <span className="text-slate-600">&bull;</span>
+                <span>Moon Sign: <strong className="text-sky-300">{activeProfile.birth_rashi.split(' ')[0]}</strong></span>
+                <span className="text-slate-600">&bull;</span>
+                <span>Star: <strong className="text-emerald-300">{activeProfile.birth_star.split(' ')[0]}</strong></span>
               </p>
             </div>
           </div>

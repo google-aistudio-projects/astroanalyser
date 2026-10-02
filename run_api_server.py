@@ -252,6 +252,50 @@ def ensure_tables_exist(conn):
         return
     cur = conn.cursor()
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS person_master (
+            person_id VARCHAR(50) PRIMARY KEY,
+            person_name VARCHAR(100),
+            age INTEGER,
+            date_of_birth DATE,
+            place_of_birth VARCHAR(100),
+            birth_lagna VARCHAR(50),
+            birth_rashi VARCHAR(50),
+            birth_star VARCHAR(50),
+            birth_star_pada INTEGER,
+            starting_dasha_lord VARCHAR(50),
+            dasha_balance_years INTEGER,
+            dasha_balance_months INTEGER,
+            dasha_balance_days INTEGER,
+            dasha_balance_text VARCHAR(150),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS natal_placement_detail (
+            id SERIAL PRIMARY KEY,
+            person_id VARCHAR(50) NOT NULL REFERENCES person_master(person_id) ON DELETE CASCADE,
+            chart_type VARCHAR(10) NOT NULL,
+            body_name VARCHAR(50) NOT NULL,
+            rashi_name VARCHAR(50) NOT NULL,
+            house_number INTEGER NOT NULL,
+            nakshatra_name VARCHAR(50),
+            pada INTEGER,
+            degree_sputa VARCHAR(20),
+            is_retrograde BOOLEAN DEFAULT FALSE,
+            CONSTRAINT uq_natal_person_chart_body UNIQUE (person_id, chart_type, body_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS vimshottari_dasha_detail (
+            id SERIAL PRIMARY KEY,
+            person_id VARCHAR(50) NOT NULL REFERENCES person_master(person_id) ON DELETE CASCADE,
+            mahadasha_lord VARCHAR(50) NOT NULL,
+            antardasha_lord VARCHAR(50) NOT NULL,
+            pratyantardasha_lord VARCHAR(50) NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            rating_score VARCHAR(10),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE SEQUENCE IF NOT EXISTS user_query_seq
             MINVALUE 1
             MAXVALUE 100
@@ -272,6 +316,81 @@ def ensure_tables_exist(conn):
     """)
     conn.commit()
     cur.close()
+
+
+def save_person_to_db(cfg: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    conn = get_db_connection(cfg)
+    if not conn:
+        return {"success": True, "notice": "Saved in memory cache (PostgreSQL connection offline)"}
+    try:
+        ensure_tables_exist(conn)
+        cur = conn.cursor()
+        pm = data.get("person", {}) or data.get("person_master", {})
+        pid = pm.get("person_id")
+        if not pid:
+            return {"success": False, "error": "Missing person_id in payload"}
+
+        cur.execute("""
+            INSERT INTO person_master (
+                person_id, person_name, age, date_of_birth, place_of_birth,
+                birth_lagna, birth_rashi, birth_star, birth_star_pada,
+                starting_dasha_lord, dasha_balance_years, dasha_balance_months,
+                dasha_balance_days, dasha_balance_text
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (person_id) DO UPDATE SET
+                person_name = EXCLUDED.person_name,
+                age = EXCLUDED.age,
+                date_of_birth = EXCLUDED.date_of_birth,
+                place_of_birth = EXCLUDED.place_of_birth,
+                birth_lagna = EXCLUDED.birth_lagna,
+                birth_rashi = EXCLUDED.birth_rashi,
+                birth_star = EXCLUDED.birth_star,
+                birth_star_pada = EXCLUDED.birth_star_pada,
+                starting_dasha_lord = EXCLUDED.starting_dasha_lord,
+                dasha_balance_years = EXCLUDED.dasha_balance_years,
+                dasha_balance_months = EXCLUDED.dasha_balance_months,
+                dasha_balance_days = EXCLUDED.dasha_balance_days,
+                dasha_balance_text = EXCLUDED.dasha_balance_text;
+        """, (
+            pid, pm.get("person_name"), pm.get("age", 40),
+            pm.get("date_of_birth"), pm.get("place_of_birth"),
+            pm.get("birth_lagna"), pm.get("birth_rashi"),
+            pm.get("birth_star"), pm.get("birth_star_pada", 1),
+            pm.get("starting_dasha_lord"), pm.get("dasha_balance_years", 0),
+            pm.get("dasha_balance_months", 0), pm.get("dasha_balance_days", 0),
+            pm.get("dasha_balance_text", "")
+        ))
+
+        # Placements
+        placements = data.get("placements", []) or (data.get("d1Placements", []) + data.get("d9Placements", []))
+        if placements:
+            for p in placements:
+                cur.execute("""
+                    INSERT INTO natal_placement_detail (
+                        person_id, chart_type, body_name, rashi_name, house_number,
+                        nakshatra_name, pada, degree_sputa, is_retrograde
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (person_id, chart_type, body_name) DO UPDATE SET
+                        rashi_name = EXCLUDED.rashi_name,
+                        house_number = EXCLUDED.house_number,
+                        nakshatra_name = EXCLUDED.nakshatra_name,
+                        pada = EXCLUDED.pada,
+                        degree_sputa = EXCLUDED.degree_sputa,
+                        is_retrograde = EXCLUDED.is_retrograde;
+                """, (
+                    pid, p.get("chart_type", "D1"),
+                    p.get("body_name"), p.get("rashi_name"),
+                    p.get("house_number", 1), p.get("nakshatra_name"),
+                    p.get("pada"), p.get("degree_sputa"),
+                    bool(p.get("is_retrograde", False))
+                ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"success": True, "message": f"Person '{pid}' committed to PostgreSQL database successfully!"}
+    except Exception as e:
+        if conn: conn.close()
+        return {"success": False, "error": str(e)}
 
 
 # =============================================================================
@@ -661,6 +780,31 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
             }, indent=2).encode())
             return
 
+        elif parsed.path == "/api/persons":
+            conn = get_db_connection(cfg)
+            persons = []
+            if conn:
+                try:
+                    ensure_tables_exist(conn)
+                    cur = conn.cursor(cursor_factory=RealDictCursor)
+                    cur.execute("""
+                        SELECT person_id, person_name, date_of_birth, place_of_birth,
+                               birth_lagna, birth_rashi, birth_star, birth_star_pada
+                        FROM person_master
+                        ORDER BY created_at ASC;
+                    """)
+                    for r in cur.fetchall():
+                        if r.get("date_of_birth"):
+                            r["date_of_birth"] = str(r["date_of_birth"])
+                        persons.append(r)
+                    cur.close()
+                    conn.close()
+                except Exception:
+                    if conn: conn.close()
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"persons": persons}).encode())
+            return
+
         elif parsed.path == "/api/user-queries/recent":
             # Fetch recent queries from user_queries table
             conn = get_db_connection(cfg)
@@ -831,6 +975,18 @@ class HoroscopeApiHandler(BaseHTTPRequestHandler):
                     self._set_headers(500)
                     self.wfile.write(json.dumps({"error": str(e2)}).encode())
                     return
+
+        elif parsed.path == "/api/horoscope/save-person":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_bytes = self.rfile.read(content_length)
+            try:
+                data = json.loads(body_bytes.decode()) if body_bytes else {}
+            except Exception:
+                data = {}
+            res = save_person_to_db(cfg, data)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(res, indent=2).encode())
+            return
 
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode())
