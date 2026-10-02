@@ -81,7 +81,51 @@ function astroApiPlugin(): Plugin {
           return;
         }
 
-        // 3. GET /api/health
+        // 3. DELETE /api/persons/:id or POST /api/persons/delete
+        const deleteMatch = url.match(/^\/api\/persons\/([A-Za-z0-9_\-]+)/);
+        if ((deleteMatch && req.method === 'DELETE') || (url === '/api/persons/delete' && req.method === 'POST')) {
+          const deletePerson = (pid: string) => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+              const dataPath = path.resolve(__dirname, 'src/data/stored_persons.json');
+              if (fs.existsSync(dataPath)) {
+                const db = JSON.parse(fs.readFileSync(dataPath, 'utf-8') || '{}');
+                if (db[pid]) {
+                  delete db[pid];
+                  fs.writeFileSync(dataPath, JSON.stringify(db, null, 2), 'utf-8');
+                  res.statusCode = 200;
+                  res.end(JSON.stringify({ success: true, message: `Deleted person ${pid} from database tables.` }));
+                  return;
+                }
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true, message: `Person ${pid} was not found or already deleted.` }));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          };
+
+          if (deleteMatch) {
+            deletePerson(deleteMatch[1]);
+            return;
+          } else {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+              try {
+                const p = JSON.parse(body || '{}');
+                deletePerson(p.person_id || p.id);
+              } catch (e: any) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ success: false, error: e.message }));
+              }
+            });
+            return;
+          }
+        }
+
+        // 4. GET /api/health
         if (url === '/api/health' && req.method === 'GET') {
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;

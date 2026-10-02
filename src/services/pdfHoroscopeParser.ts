@@ -1,11 +1,12 @@
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PersonMaster, NatalPlacement } from '../data/horoscopeData';
 
-// Configure pdfjs worker if available in browser
+// Configure pdfjs worker using Vite local asset bundle URL
 if (typeof window !== 'undefined') {
   try {
-    // Disable worker or use external cdn worker to avoid bundler asset issues
-    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfjsWorker;
   } catch (e) {
     console.warn('PDF worker setup notice:', e);
   }
