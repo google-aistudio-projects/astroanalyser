@@ -194,44 +194,42 @@ function getPlanetTropicalLongitude(planet: string, jd: number): number {
     return normalize360(rahu + 180.0);
   }
 
-  const ORBITS: Record<string, [number, number, number, number, number, number]> = {
-    Mercury: [0.38709893, 0.20563069, 7.00487, normalize360(252.25084 + 149472.67411 * T), normalize360(77.45645 + 1.55648 * T), normalize360(48.33132)],
-    Venus:   [0.72333199, 0.00677323, 3.39471, normalize360(181.97973 + 58517.81539 * T), normalize360(131.57294 + 1.40222 * T), normalize360(76.68069)],
-    Mars:    [1.52366231, 0.09341233, 1.85061, normalize360(355.45332 + 19140.30268 * T), normalize360(336.04084 + 1.84104 * T), normalize360(49.55740)],
-    Jupiter: [5.20336301, 0.04839266, 1.30530, normalize360(34.40438 + 3034.79203 * T), normalize360(14.75385 + 1.61263 * T), normalize360(100.55615)],
-    Saturn:  [9.53707032, 0.05415060, 2.48446, normalize360(49.94424 + 1222.49362 * T), normalize360(92.43194 - 0.81997 * T), normalize360(113.71504)]
+  // Earth's heliocentric position
+  const L_e = normalize360(100.466449 + 36000.769785 * T);
+  const M_e = normalize360(357.529109 + 35999.050291 * T);
+  const e_e = 0.0167086 - 0.000042037 * T;
+  const v_e = M_e + (2 * e_e - 0.25 * Math.pow(e_e, 3)) * Math.sin(toRad(M_e)) * (180 / Math.PI);
+  const l_earth = toRad(normalize360(L_e + v_e - M_e));
+  const r_e = (1.000001018 * (1 - e_e * e_e)) / (1 + e_e * Math.cos(toRad(M_e)));
+  const Xe = r_e * Math.cos(l_earth);
+  const Ye = r_e * Math.sin(l_earth);
+
+  // NASA JPL Keplerian Elements for major planets
+  // [a (AU), e, L (mean long), peri (long of perihelion)]
+  const JPL_ORBITS: Record<string, [number, number, number, number]> = {
+    Mercury: [0.38709893, 0.20563069 + 0.00002527 * T, normalize360(252.25084 + 149472.67411 * T), normalize360(77.45645 + 1.55648 * T)],
+    Venus:   [0.72333199, 0.00677323 - 0.00004938 * T, normalize360(181.97973 + 58517.81539 * T), normalize360(131.57294 + 1.40222 * T)],
+    Mars:    [1.52366231, 0.09341233 + 0.00011902 * T, normalize360(355.45332 + 19140.30268 * T), normalize360(336.04084 + 1.84104 * T)],
+    Jupiter: [5.20336301, 0.04839266 - 0.00012880 * T, normalize360(34.40438 + 3034.79203 * T),  normalize360(14.75385 + 1.61263 * T)],
+    Saturn:  [9.53707032, 0.05415060 - 0.00036762 * T, normalize360(49.94424 + 1222.49362 * T),  normalize360(92.43194 - 0.81997 * T)]
   };
 
-  if (ORBITS[planet]) {
-    const [a, e, i_deg, L, w, node] = ORBITS[planet];
-    const M_rad = toRad(normalize360(L - w));
-    const E_rad = solveKepler(M_rad, e);
-    const x_orb = a * (Math.cos(E_rad) - e);
-    const y_orb = a * Math.sqrt(1.0 - e * e) * Math.sin(E_rad);
+  if (JPL_ORBITS[planet]) {
+    const [a, e, L, peri] = JPL_ORBITS[planet];
+    const M_deg = normalize360(L - peri);
+    const M_rad = toRad(M_deg);
+    const v_deg = M_deg + (2 * e - 0.25 * Math.pow(e, 3)) * Math.sin(M_rad) * (180 / Math.PI);
+    const l_planet = toRad(normalize360(peri + v_deg));
+    const r_planet = (a * (1 - e * e)) / (1 + e * Math.cos(M_rad));
 
-    const w_rad = toRad(w - node);
-    const node_rad = toRad(node);
-    const i_rad = toRad(i_deg);
+    const Xp = r_planet * Math.cos(l_planet);
+    const Yp = r_planet * Math.sin(l_planet);
 
-    const P_x = Math.cos(w_rad) * Math.cos(node_rad) - Math.sin(w_rad) * Math.sin(node_rad) * Math.cos(i_rad);
-    const P_y = Math.cos(w_rad) * Math.sin(node_rad) + Math.sin(w_rad) * Math.cos(node_rad) * Math.cos(i_rad);
-    const P_z = Math.sin(w_rad) * Math.sin(i_rad);
+    // Geocentric vector (planet - earth)
+    const Xg = Xp - Xe;
+    const Yg = Yp - Ye;
 
-    const Q_x = -Math.sin(w_rad) * Math.cos(node_rad) - Math.cos(w_rad) * Math.sin(node_rad) * Math.cos(i_rad);
-    const Q_y = -Math.sin(w_rad) * Math.sin(node_rad) + Math.cos(w_rad) * Math.cos(node_rad) * Math.cos(i_rad);
-    const Q_z = Math.cos(w_rad) * Math.sin(i_rad);
-
-    const x_hel = x_orb * P_x + y_orb * Q_x;
-    const y_hel = x_orb * P_y + y_orb * Q_y;
-
-    const sun_long_rad = toRad(getPlanetTropicalLongitude("Sun", jd));
-    const x_earth = -Math.cos(sun_long_rad);
-    const y_earth = -Math.sin(sun_long_rad);
-
-    const x_geo = x_hel - x_earth;
-    const y_geo = y_hel - y_earth;
-
-    return normalize360(toDeg(Math.atan2(y_geo, x_geo)));
+    return normalize360(toDeg(Math.atan2(Yg, Xg)));
   }
 
   return 0.0;

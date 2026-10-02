@@ -22,7 +22,11 @@ import {
   Check,
   Bot,
   Volume2,
-  Mic
+  Mic,
+  GripVertical,
+  Move,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { ingestedPersonsRegistry, ALL_DASHA_TIMELINE } from '../data/apiService';
@@ -226,11 +230,116 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     return activeDate.toISOString().slice(0, 10);
   }, [activeDate]);
 
-  // Compute Active Month Transits (Gochara) using astronomical ephemeris
-  const transitPlacements = useMemo(() => {
+  // User Custom Transit Placements (Overrides default calculated cache)
+  const storageKey = useMemo(() => {
+    return `vedic_transit_override_${personId}_${selectedYear}_${selectedMonth}`;
+  }, [personId, selectedYear, selectedMonth]);
+
+  const [savedOverrides, setSavedOverrides] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem(`vedic_transit_override_${personId}_${selectedYear}_${selectedMonth}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Track staged changes during drag/move before clicking "Ingest / Inject"
+  const [stagedOverrides, setStagedOverrides] = useState<Record<string, number> | null>(null);
+
+  // Drag and drop states
+  const [draggedGraha, setDraggedGraha] = useState<string | null>(null);
+  const [dropTargetSign, setDropTargetSign] = useState<number | null>(null);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [activePickerGraha, setActivePickerGraha] = useState<string | null>(null);
+
+  // Sync saved overrides when year/month/native changes
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setSavedOverrides(stored ? JSON.parse(stored) : {});
+      setStagedOverrides(null);
+      setSaveSuccessMsg(null);
+    } catch {
+      setSavedOverrides({});
+      setStagedOverrides(null);
+    }
+  }, [storageKey]);
+
+  // Baseline astronomical ephemeris positions
+  const baseTransitPlacements = useMemo(() => {
     const grahaKeys = ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn', 'Rahu', 'Ketu'];
     return grahaKeys.map(k => getGrahaTransitPosition(k, activeDate, natalLagnaIdx, natalRashiIdx));
   }, [activeDate, natalLagnaIdx, natalRashiIdx]);
+
+  // Active Effective Transit Placements: Pick up directly from Chart customizations (overrides cache)
+  const activeEffectiveOverrides = stagedOverrides !== null ? stagedOverrides : savedOverrides;
+  const isCustomIngested = Object.keys(savedOverrides).length > 0;
+  const hasStagedChanges = stagedOverrides !== null && Object.keys(stagedOverrides).length > 0;
+
+  // Compute Active Month Transits (Gochara) using custom chart placements if modified
+  const transitPlacements = useMemo(() => {
+    return baseTransitPlacements.map(tp => {
+      const customSignIdx = activeEffectiveOverrides[tp.graha_key];
+      if (customSignIdx && customSignIdx >= 1 && customSignIdx <= 12) {
+        const signDef = SOUTH_INDIAN_SIGNS.find(s => s.index === customSignIdx) || SOUTH_INDIAN_SIGNS[0];
+        const houseFromLagna = ((customSignIdx - natalLagnaIdx + 12) % 12) + 1;
+        const houseFromMoon = ((customSignIdx - natalRashiIdx + 12) % 12) + 1;
+        return {
+          ...tp,
+          transit_rashi_index: customSignIdx,
+          transit_rashi_name: signDef.eng,
+          transit_rashi_tamil: signDef.tamil,
+          rashi_lord: signDef.lord,
+          relative_to_natal_lagna: {
+            house_number: houseFromLagna,
+            house_title: `House ${houseFromLagna} (${signDef.eng.split(' ')[0]})`,
+            description: `Transiting House ${houseFromLagna} from Natal Lagna (Custom Chart Ingested)`
+          },
+          relative_to_natal_rashi: {
+            house_number: houseFromMoon,
+            house_title: `House ${houseFromMoon} (${signDef.eng.split(' ')[0]})`,
+            description: `Transiting House ${houseFromMoon} from Natal Moon (Custom Chart Ingested)`
+          },
+          is_custom_user_adjusted: true
+        };
+      }
+      return tp;
+    });
+  }, [baseTransitPlacements, activeEffectiveOverrides, natalLagnaIdx, natalRashiIdx]);
+
+  // Move a planet to a new house on the chart
+  const handleMoveGraha = (grahaKey: string, targetSignIndex: number) => {
+    const current = stagedOverrides !== null ? { ...stagedOverrides } : { ...savedOverrides };
+    current[grahaKey] = targetSignIndex;
+    setStagedOverrides(current);
+    setSaveSuccessMsg(null);
+  };
+
+  // Ingest/Inject button action: locks the changes directly from chart and overrides cache
+  const handleIngestCustomPlacements = () => {
+    const toSave = stagedOverrides !== null ? stagedOverrides : savedOverrides;
+    setSavedOverrides(toSave);
+    setStagedOverrides(null);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(toSave));
+    } catch (e) {
+      console.warn('LocalStorage error saving custom transits:', e);
+    }
+    setSaveSuccessMsg('✓ Custom transit placements ingested directly from Chart! Cache overridden and all downstream analysis updated.');
+    setTimeout(() => setSaveSuccessMsg(null), 7000);
+  };
+
+  // Reset to default astronomical calculation
+  const handleResetCustomPlacements = () => {
+    setStagedOverrides(null);
+    setSavedOverrides({});
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {}
+    setSaveSuccessMsg('↺ Restored standard astronomical ephemeris positions.');
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
 
   // Resolve Active Vimshottari Dasha Hierarchy for Selected Date dynamically
   const activeDashaHierarchy = useMemo(() => {
@@ -628,6 +737,26 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               <span>+1 Yr</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
+
+            {/* Intra-Month Day Selector */}
+            <div className="flex items-center gap-1 text-[11px] bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+              <span className="text-slate-400 font-medium">Day:</span>
+              {[1, 5, 10, 15, 20, 25, 28].map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setSelectedDay(d)}
+                  className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold transition ${
+                    selectedDay === d
+                      ? 'bg-amber-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                  title={`Calculate ephemeris for Day ${d}`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Real-Time Vimshottari Dasha Hierarchy Card */}
@@ -675,25 +804,39 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
 
         {/* Selected Month Key Planetary Transits Strip */}
         <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
-            <Compass className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Gochara Coordinates ({MONTH_NAMES[selectedMonth]} {selectedYear}):</span>
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Gochara Coordinates ({MONTH_NAMES[selectedMonth]} {selectedDay}, {selectedYear}):</span>
+            </span>
+            {isCustomIngested && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                <Check className="w-2.5 h-2.5" />
+                Custom Ingestion Active
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            {['Saturn', 'Jupiter', 'Mars', 'Rahu'].map(gKey => {
+            {['Venus', 'Saturn', 'Jupiter', 'Mars', 'Rahu'].map(gKey => {
               const tp = transitPlacements.find(p => p.graha_key === gKey);
               if (!tp) return null;
+              const isCustom = (tp as any).is_custom_user_adjusted;
               return (
                 <span
                   key={gKey}
-                  className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-300 flex items-center gap-1 font-mono text-[10px]"
+                  className={`px-2 py-0.5 rounded-md border flex items-center gap-1 font-mono text-[10px] ${
+                    isCustom
+                      ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200 ring-1 ring-emerald-500/40'
+                      : 'bg-slate-950 border-slate-800 text-slate-300'
+                  }`}
                 >
-                  <strong className={gKey === 'Saturn' ? 'text-indigo-400' : gKey === 'Jupiter' ? 'text-yellow-400' : 'text-rose-400'}>
+                  <strong className={gKey === 'Venus' ? 'text-pink-300' : gKey === 'Saturn' ? 'text-indigo-400' : gKey === 'Jupiter' ? 'text-yellow-400' : 'text-rose-400'}>
                     {gKey}:
                   </strong>
                   <span>{tp.transit_rashi_tamil} ({tp.transit_rashi_name.split(' ')[0]})</span>
-                  <span className="text-amber-400/90">{tp.degree_sputa.split(' ')[0]}</span>
+                  <span className="text-amber-400/90">{tp.degree_sputa ? tp.degree_sputa.split(' ')[0] : ''}</span>
                   {tp.is_retrograde && <span className="text-rose-400 font-bold">(R)</span>}
+                  {isCustom && <span className="text-emerald-400 font-bold ml-0.5">[Custom]</span>}
                 </span>
               );
             })}
@@ -783,6 +926,79 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
         </div>
       )}
 
+      {/* SUCCESS CONFIRMATION BANNER */}
+      {saveSuccessMsg && (
+        <div className="bg-emerald-500 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+          <span className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-slate-950" />
+            {saveSuccessMsg}
+          </span>
+          <button onClick={() => setSaveSuccessMsg(null)} className="p-1 hover:bg-emerald-600 rounded">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* UNLOCKED / STAGED CHANGES BANNER: INGESTION ACTION */}
+      {hasStagedChanges && (
+        <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-2 border-amber-400 rounded-xl p-3.5 sm:p-4 text-xs shadow-2xl shadow-amber-500/15 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <span className="p-2 rounded-lg bg-amber-500/20 text-amber-300">
+              <Move className="w-5 h-5 text-amber-400 animate-pulse" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-white text-sm">
+                  ✏️ Transit Graha Placements Adjusted ({Object.keys(stagedOverrides || {}).length} modified)
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">
+                  Staged &bull; Needs Ingestion
+                </span>
+              </div>
+              <p className="text-slate-300 mt-1">
+                You repositioned planets on the chart for <strong className="text-amber-300">{MONTH_NAMES[selectedMonth]} {selectedYear}</strong>. Click <strong className="text-amber-400">"Ingest / Inject to Chart"</strong> to lock these placements, update all Gocharam aspects, and override the default cache!
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={handleIngestCustomPlacements}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 shadow-lg shadow-amber-500/30 transition transform active:scale-95 cursor-pointer"
+              title="Save & lock these custom placements to chart and override calculation cache"
+            >
+              <Download className="w-4 h-4" />
+              <span>📥 Ingest / Inject to Chart</span>
+            </button>
+            <button
+              onClick={() => setStagedOverrides(null)}
+              className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+              title="Discard staged adjustments"
+            >
+              ↺ Discard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SAVED CUSTOM INGESTION ACTIVE BANNER */}
+      {!hasStagedChanges && isCustomIngested && (
+        <div className="bg-emerald-950/40 border border-emerald-500/50 rounded-xl px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-3 text-emerald-200 shadow-md shadow-emerald-500/10">
+          <span className="flex items-center gap-2 font-medium">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              <strong>✓ Custom Chart Ingestion Active:</strong> Transits for <strong className="text-emerald-300">{MONTH_NAMES[selectedMonth]} {selectedYear}</strong> are currently loaded directly from your chart customizations ({Object.keys(savedOverrides).length} planets overridden). All aspects, activations, and voice inspector use your chart.
+            </span>
+          </span>
+          <button
+            onClick={handleResetCustomPlacements}
+            className="px-3 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 transition shrink-0"
+            title="Reset this month's transit back to standard astronomical ephemeris"
+          >
+            ↺ Reset to Ephemeris
+          </button>
+        </div>
+      )}
+
       {/* FULL SCREEN 4x4 SOUTH INDIAN D1 GRID */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xl">
         <div className="grid grid-cols-4 grid-rows-4 gap-2.5 sm:gap-3.5 aspect-square max-w-4xl mx-auto bg-slate-950 p-2.5 sm:p-3.5 rounded-2xl border border-slate-800 shadow-inner">
@@ -844,9 +1060,12 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               // PD Micro-Focus Slider States
               const isSpotlighted = isMicroPdFocus && isPdLordFocus;
               const isKeptAside = isMicroPdFocus && !isPdLordFocus && !isAspectSource && !isAspectedTarget;
+              const isDropTarget = dropTargetSign === signDef.index;
 
               let cellStyle = 'relative rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-300 border ';
-              if (isKeptAside) {
+              if (isDropTarget) {
+                cellStyle += 'border-emerald-400 bg-emerald-950/70 ring-4 ring-emerald-400/80 shadow-2xl shadow-emerald-500/30 scale-[1.02] z-20';
+              } else if (isKeptAside) {
                 cellStyle += 'opacity-35 bg-slate-950/40 border-slate-900/60 hover:opacity-100 hover:border-slate-700 hover:bg-slate-900/80';
               } else if (isSpotlighted) {
                 cellStyle += 'border-amber-400 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 ring-2 ring-amber-400/90 shadow-xl shadow-amber-500/25 scale-[1.01] z-10';
@@ -868,6 +1087,27 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                 <div
                   key={`cell-${rowIdx}-${colIdx}`}
                   className={cellStyle}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dropTargetSign !== signDef.index) {
+                      setDropTargetSign(signDef.index);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dropTargetSign === signDef.index) {
+                      setDropTargetSign(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const graha = e.dataTransfer.getData('text/plain') || draggedGraha;
+                    if (graha) {
+                      handleMoveGraha(graha, signDef.index);
+                    }
+                    setDropTargetSign(null);
+                    setDraggedGraha(null);
+                  }}
                 >
                   {/* CELL HEADER: Zodiac Symbol, Icon, Tamil Name & Relative House */}
                   <div className="flex items-center justify-between gap-1 leading-none pb-1 border-b border-slate-800/60">
@@ -1001,41 +1241,120 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                       );
                     })}
 
-                    {/* OVERLAY LAYER: TRANSITING PLANETS (GOCHARA) - COLOR CODED IN YELLOW */}
+                    {/* OVERLAY LAYER: TRANSITING PLANETS (GOCHARA) - DRAGGABLE & CUSTOMIZABLE */}
                     {currentTransitsInSign.map(transitP => {
                       const isSelected =
                         activeRaycast?.layer === 'transit' &&
                         activeRaycast?.name === transitP.graha_key &&
                         activeRaycast?.sourceSignIndex === signDef.index;
+                      const isCustom = (transitP as any).is_custom_user_adjusted;
 
                       return (
-                        <button
+                        <div
                           key={`transit-${transitP.graha_key}`}
-                          onClick={e =>
-                            handlePlanetClick(e, transitP.graha_key, signDef.index, signDef.eng, 'transit')
-                          }
-                          className={`w-full text-left text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded flex items-center justify-between transition ${
-                            isSelected
-                              ? 'bg-amber-400 text-slate-950 font-extrabold ring-2 ring-amber-300 shadow-md'
-                              : 'bg-amber-950/30 text-amber-300 border border-amber-500/40 hover:bg-amber-900/40 hover:border-amber-400'
-                          }`}
-                          title={`[Tr] Transit ${transitP.graha_name} at ${transitP.degree_sputa} (Click to raycast Graha Drishti)`}
+                          className="relative group"
                         >
-                          <span className="flex items-center gap-1 truncate">
-                            <span className="text-[9px] px-1 rounded bg-amber-500/25 text-amber-300 font-mono font-bold">
-                              Tr
-                            </span>
-                            <span className="truncate">{transitP.graha_key}</span>
-                          </span>
-                          <span className="text-[9px] font-mono text-amber-300/90 ml-1">
-                            {transitP.is_retrograde && (
-                              <span className="text-rose-400 mr-1" title="Retrograde (வக்ரம்)">
-                                (R)
+                          <div
+                            draggable={true}
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              e.dataTransfer.setData('text/plain', transitP.graha_key);
+                              e.dataTransfer.effectAllowed = 'move';
+                              setDraggedGraha(transitP.graha_key);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedGraha(null);
+                              setDropTargetSign(null);
+                            }}
+                            onClick={e =>
+                              handlePlanetClick(e, transitP.graha_key, signDef.index, signDef.eng, 'transit')
+                            }
+                            className={`w-full text-left text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded flex items-center justify-between transition cursor-grab active:cursor-grabbing select-none ${
+                              isSelected
+                                ? 'bg-amber-400 text-slate-950 font-extrabold ring-2 ring-amber-300 shadow-md'
+                                : isCustom
+                                ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/70 hover:bg-emerald-900/60 hover:border-emerald-400 shadow-sm'
+                                : 'bg-amber-950/30 text-amber-300 border border-amber-500/40 hover:bg-amber-900/40 hover:border-amber-400'
+                            }`}
+                            title={`[Tr] Transit ${transitP.graha_name} at ${transitP.degree_sputa}\n✋ Drag & drop into any of the 12 houses to adjust, or click the move icon`}
+                          >
+                            <span className="flex items-center gap-1 truncate">
+                              <span
+                                className="cursor-grab opacity-60 group-hover:opacity-100 text-slate-400 mr-0.5"
+                                title="Drag & drop to move this planet to another house"
+                              >
+                                <GripVertical className="w-2.5 h-2.5 inline" />
                               </span>
-                            )}
-                            {transitP.degree_sputa}
-                          </span>
-                        </button>
+                              <span className={`text-[8.5px] px-1 rounded font-mono font-bold ${
+                                isCustom ? 'bg-emerald-500/30 text-emerald-200' : 'bg-amber-500/25 text-amber-300'
+                              }`}>
+                                {isCustom ? 'Custom' : 'Tr'}
+                              </span>
+                              <span className="truncate">{transitP.graha_key}</span>
+                            </span>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-mono text-amber-300/90">
+                                {transitP.is_retrograde && (
+                                  <span className="text-rose-400 mr-1" title="Retrograde (வக்ரம்)">
+                                    (R)
+                                  </span>
+                                )}
+                                {transitP.degree_sputa ? transitP.degree_sputa.split(' ')[0] : ''}
+                              </span>
+
+                              {/* Quick Move Dropdown Trigger */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActivePickerGraha(activePickerGraha === transitP.graha_key ? null : transitP.graha_key);
+                                }}
+                                className="p-0.5 rounded hover:bg-amber-400/20 text-slate-400 hover:text-amber-300 transition"
+                                title={`Move ${transitP.graha_key} to a different sign`}
+                              >
+                                <Move className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick Sign Picker Popover */}
+                          {activePickerGraha === transitP.graha_key && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute left-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-lg p-2 shadow-2xl w-48 text-left space-y-1 animate-in fade-in zoom-in-95"
+                            >
+                              <div className="flex items-center justify-between text-[10px] font-bold text-slate-300 pb-1 border-b border-slate-800">
+                                <span>Move {transitP.graha_key} to:</span>
+                                <button
+                                  onClick={() => setActivePickerGraha(null)}
+                                  className="text-slate-500 hover:text-white"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto">
+                                {SOUTH_INDIAN_SIGNS.map(s => (
+                                  <button
+                                    key={s.index}
+                                    type="button"
+                                    onClick={() => {
+                                      handleMoveGraha(transitP.graha_key, s.index);
+                                      setActivePickerGraha(null);
+                                    }}
+                                    className={`px-1.5 py-1 text-[9px] rounded font-semibold text-left truncate transition ${
+                                      s.index === signDef.index
+                                        ? 'bg-amber-500 text-slate-950 font-bold'
+                                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                                    }`}
+                                  >
+                                    {s.icon} {s.tamil}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
 

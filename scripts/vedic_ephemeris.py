@@ -194,60 +194,42 @@ def get_planet_tropical_longitude(planet: str, jd: float) -> float:
         rahu = get_planet_tropical_longitude("Rahu", jd)
         return normalize_360(rahu + 180.0)
 
+    # Earth's heliocentric position
+    L_e = normalize_360(100.466449 + 36000.769785 * T)
+    M_e = normalize_360(357.529109 + 35999.050291 * T)
+    e_e = 0.0167086 - 0.000042037 * T
+    v_e = M_e + (2 * e_e - 0.25 * (e_e**3)) * math.sin(math.radians(M_e)) * (180.0 / math.pi)
+    l_earth = math.radians(normalize_360(L_e + v_e - M_e))
+    r_e = (1.000001018 * (1.0 - e_e**2)) / (1.0 + e_e * math.cos(math.radians(M_e)))
+    Xe = r_e * math.cos(l_earth)
+    Ye = r_e * math.sin(l_earth)
+
     # Heliocentric orbital elements for Mercury, Venus, Mars, Jupiter, Saturn
-    # Format: a (AU), e, i (deg), L (mean long deg), w (perihelion deg), node (node deg)
-    ORBIT_ELEMENTS = {
-        "Mercury": (0.38709893 + 0.00000066 * T, 0.20563069 + 0.00002527 * T, 7.00487 - 0.005947 * T,
-                    normalize_360(252.25084 + 149472.67411 * T), normalize_360(77.45645 + 1.55648 * T), normalize_360(48.33132 + 1.18640 * T)),
-        "Venus":   (0.72333199 + 0.00000092 * T, 0.00677323 - 0.00004938 * T, 3.39471 - 0.000789 * T,
-                    normalize_360(181.97973 + 58517.81539 * T), normalize_360(131.57294 + 1.40222 * T), normalize_360(76.68069 + 0.90112 * T)),
-        "Mars":    (1.52366231 - 0.00007221 * T, 0.09341233 + 0.00011902 * T, 1.85061 - 0.000675 * T,
-                    normalize_360(355.45332 + 19140.30268 * T), normalize_360(336.04084 + 1.84104 * T), normalize_360(49.55740 + 0.77209 * T)),
-        "Jupiter": (5.20336301 + 0.00060737 * T, 0.04839266 - 0.00012880 * T, 1.30530 - 0.004150 * T,
-                    normalize_360(34.40438 + 3034.79203 * T), normalize_360(14.75385 + 1.61263 * T), normalize_360(100.55615 + 1.21172 * T)),
-        "Saturn":  (9.53707032 - 0.00301530 * T, 0.05415060 - 0.00036762 * T, 2.48446 + 0.006110 * T,
-                    normalize_360(49.94424 + 1222.49362 * T), normalize_360(92.43194 - 0.81997 * T), normalize_360(113.71504 - 0.28867 * T)),
+    # Format: a (AU), e, L (mean long deg), peri (long of perihelion deg)
+    JPL_ORBITS = {
+        "Mercury": (0.38709893, 0.20563069 + 0.00002527 * T, normalize_360(252.25084 + 149472.67411 * T), normalize_360(77.45645 + 1.55648 * T)),
+        "Venus":   (0.72333199, 0.00677323 - 0.00004938 * T, normalize_360(181.97973 + 58517.81539 * T), normalize_360(131.57294 + 1.40222 * T)),
+        "Mars":    (1.52366231, 0.09341233 + 0.00011902 * T, normalize_360(355.45332 + 19140.30268 * T), normalize_360(336.04084 + 1.84104 * T)),
+        "Jupiter": (5.20336301, 0.04839266 - 0.00012880 * T, normalize_360(34.40438 + 3034.79203 * T),  normalize_360(14.75385 + 1.61263 * T)),
+        "Saturn":  (9.53707032, 0.05415060 - 0.00036762 * T, normalize_360(49.94424 + 1222.49362 * T),  normalize_360(92.43194 - 0.81997 * T)),
     }
 
-    if planet in ORBIT_ELEMENTS:
-        a, e, i_deg, L, w, node = ORBIT_ELEMENTS[planet]
-        M = normalize_360(L - w)
-        M_rad = math.radians(M)
-        E_rad = solve_kepler(M_rad, e)
+    if planet in JPL_ORBITS:
+        a, e, L, peri = JPL_ORBITS[planet]
+        M_deg = normalize_360(L - peri)
+        M_rad = math.radians(M_deg)
+        v_deg = M_deg + (2 * e - 0.25 * (e**3)) * math.sin(M_rad) * (180.0 / math.pi)
+        l_planet = math.radians(normalize_360(peri + v_deg))
+        r_planet = (a * (1.0 - e**2)) / (1.0 + e * math.cos(M_rad))
 
-        # Heliocentric coordinates in orbital plane
-        x_orb = a * (math.cos(E_rad) - e)
-        y_orb = a * math.sqrt(1.0 - e**2) * math.sin(E_rad)
+        Xp = r_planet * math.cos(l_planet)
+        Yp = r_planet * math.sin(l_planet)
 
-        # Convert to Heliocentric ecliptic coordinates (x_hel, y_hel, z_hel)
-        w_rad = math.radians(w - node)
-        node_rad = math.radians(node)
-        i_rad = math.radians(i_deg)
+        # Geocentric vector (planet - earth)
+        Xg = Xp - Xe
+        Yg = Yp - Ye
 
-        P_x = math.cos(w_rad) * math.cos(node_rad) - math.sin(w_rad) * math.sin(node_rad) * math.cos(i_rad)
-        P_y = math.cos(w_rad) * math.sin(node_rad) + math.sin(w_rad) * math.cos(node_rad) * math.cos(i_rad)
-        P_z = math.sin(w_rad) * math.sin(i_rad)
-
-        Q_x = -math.sin(w_rad) * math.cos(node_rad) - math.cos(w_rad) * math.sin(node_rad) * math.cos(i_rad)
-        Q_y = -math.sin(w_rad) * math.sin(node_rad) + math.cos(w_rad) * math.cos(node_rad) * math.cos(i_rad)
-        Q_z = math.cos(w_rad) * math.sin(i_rad)
-
-        x_hel = x_orb * P_x + y_orb * Q_x
-        y_hel = x_orb * P_y + y_orb * Q_y
-        z_hel = x_orb * P_z + y_orb * Q_z
-
-        # Earth's heliocentric position (approximated from Sun's geocentric pos)
-        sun_long_rad = math.radians(get_planet_tropical_longitude("Sun", jd))
-        sun_dist = 1.00014 - 0.01671 * math.cos(math.radians(357.529 + 35999.05 * T))
-        x_earth = -sun_dist * math.cos(sun_long_rad)
-        y_earth = -sun_dist * math.sin(sun_long_rad)
-
-        # Geocentric coordinates
-        x_geo = x_hel - x_earth
-        y_geo = y_hel - y_earth
-
-        geocentric_long = normalize_360(math.degrees(math.atan2(y_geo, x_geo)))
-        return geocentric_long
+        return normalize_360(math.degrees(math.atan2(Yg, Xg)))
 
     return 0.0
 
