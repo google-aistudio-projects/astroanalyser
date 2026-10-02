@@ -62,6 +62,7 @@ export interface VedicHouseContext {
     degree_sputa?: string;
     nakshatra_name?: string;
     is_retrograde?: boolean;
+    is_custom?: boolean;
   }>;
   activeDasha: {
     mahadasha: string;

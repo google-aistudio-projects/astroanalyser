@@ -328,6 +328,12 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                     Score: {context.activationScore.toFixed(2)}
                   </span>
                 )}
+                {context.transitOccupants.some(t => t.is_custom) && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 shadow-sm">
+                    <Check className="w-2.5 h-2.5" />
+                    Custom Chart Transits Active
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Vedic Multi-LLM Reasoning Engine &amp; Audio Voice Inspector
@@ -815,7 +821,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
               <span className="text-[10px] text-slate-500 uppercase block font-semibold">Transit Grahas</span>
               <span className="text-cyan-300 font-bold text-[11px] truncate block">
                 {context.transitOccupants.length > 0
-                  ? context.transitOccupants.map(t => t.graha_key).join(', ')
+                  ? context.transitOccupants.map(t => `${t.graha_key}${t.is_custom ? ' [Custom]' : ''}`).join(', ')
                   : 'No Ingress'}
               </span>
             </div>

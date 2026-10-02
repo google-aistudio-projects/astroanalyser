@@ -46,7 +46,7 @@ function buildVedicPrompt(context: VedicHouseContext, providerName: string): str
     : 'None (Vacant / Empty House)';
 
   const transitStr = context.transitOccupants.length > 0
-    ? context.transitOccupants.map(t => `${t.graha_key} ${t.is_retrograde ? '[R]' : ''} (Sputa: ${t.degree_sputa || 'N/A'})`).join(', ')
+    ? context.transitOccupants.map(t => `${t.graha_key}${t.is_custom ? ' [User-Adjusted Chart Transit]' : ''} ${t.is_retrograde ? '[R]' : ''} (Sputa: ${t.degree_sputa || 'N/A'})`).join(', ')
     : 'No Direct Transit Ingress';
 
   const rulesStr = context.matchedRules.length > 0

@@ -456,7 +456,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
         graha_key: t.graha_key,
         degree_sputa: t.degree_sputa,
         nakshatra_name: t.graha_pada_chara?.nakshatra_name,
-        is_retrograde: t.is_retrograde
+        is_retrograde: t.is_retrograde,
+        is_custom: !!(t as any).is_custom_user_adjusted
       })),
       activeDasha: activeDashaHierarchy,
       selectedMonth,
