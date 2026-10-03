@@ -1,5 +1,6 @@
 import { samplePersonMaster, sampleNatalPlacements, PersonMaster, NatalPlacement } from './horoscopeData';
 import { generateClientTransitTimeline, TransitEphemerisPayload } from './transitEphemeris';
+import { getFullVimshottariTimeline, calculateVimshottariTimelineForProfile } from './dashaCalculator';
 import storedPersonsData from './stored_persons.json';
 
 export interface UserQueryLog {
@@ -510,7 +511,14 @@ export function executeHoroscopeTimelineQuery(personId: string, startDateStr: st
   const registered = ingestedPersonsRegistry[personId] || ingestedPersonsRegistry['001ME'];
   const personProfile = registered.profile;
   const natalPlacementsList = registered.placements;
-  const dashaSource = registered.dashaRecords || ALL_DASHA_TIMELINE;
+  let dashaSource: [string, string, string, string, string][];
+  if (registered.dashaRecords && registered.dashaRecords.length > 50) {
+    dashaSource = registered.dashaRecords;
+  } else if (personId === '001ME') {
+    dashaSource = getFullVimshottariTimeline();
+  } else {
+    dashaSource = calculateVimshottariTimelineForProfile(personProfile);
+  }
 
   // Filter overlapping periods: (start_date <= requested_end) AND (end_date >= requested_start)
   const filtered = dashaSource.filter(([_, __, ___, s, e]) => s <= normEnd && e >= normStart);

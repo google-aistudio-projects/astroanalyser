@@ -76,6 +76,8 @@ export default function App() {
     return Object.keys(ingestedPersonsRegistry);
   });
 
+  const [registryVersion, setRegistryVersion] = useState(0);
+
   // Dynamically resolve active person profile & placements from registry/DB
   const activeRecord = useMemo(() => {
     return ingestedPersonsRegistry[activePersonId] || ingestedPersonsRegistry['001ME'] || {
@@ -83,7 +85,7 @@ export default function App() {
       placements: sampleNatalPlacements,
       dashaRecords: ALL_DASHA_TIMELINE
     };
-  }, [activePersonId, availablePersonIds]);
+  }, [activePersonId, availablePersonIds, registryVersion]);
 
   const activeProfile = activeRecord.profile;
 
@@ -114,6 +116,7 @@ export default function App() {
 
     // 1. Make REST call to fetch full record from DB
     await fetchPersonDetailsFromBackend(newId);
+    setRegistryVersion(v => v + 1);
 
     // 2. Make REST query call to load timeline
     const res = executeHoroscopeTimelineQuery(newId, apiStartDate, apiEndDate);

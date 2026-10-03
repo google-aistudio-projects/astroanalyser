@@ -93,6 +93,84 @@ export function getFullVimshottariTimeline(): [string, string, string, string, s
   return intervals;
 }
 
+const profileTimelineCache = new Map<string, [string, string, string, string, string][]>();
+
+export function calculateVimshottariTimelineForProfile(profile?: {
+  person_id?: string;
+  date_of_birth?: string;
+  starting_dasha_lord?: string;
+  dasha_balance_years?: number;
+  dasha_balance_months?: number;
+  dasha_balance_days?: number;
+}): [string, string, string, string, string][] {
+  if (!profile || !profile.starting_dasha_lord) {
+    return getFullVimshottariTimeline();
+  }
+
+  const cacheKey = `${profile.person_id || ''}_${profile.date_of_birth || ''}_${profile.starting_dasha_lord}_${profile.dasha_balance_years || 0}`;
+  if (profileTimelineCache.has(cacheKey)) {
+    return profileTimelineCache.get(cacheKey)!;
+  }
+
+  const intervals: [string, string, string, string, string][] = [];
+  const startLordNorm = profile.starting_dasha_lord.toLowerCase();
+  let startLordIdx = LORDS.findIndex(l => startLordNorm.includes(l.name.toLowerCase().split(' ')[0]));
+  if (startLordIdx === -1) startLordIdx = 7; // Saturn fallback
+
+  const dobDate = new Date(profile.date_of_birth || '1984-07-18');
+  const balYears = Number(profile.dasha_balance_years ?? 7);
+  const balMonths = Number(profile.dasha_balance_months ?? 5);
+  const balDays = Number(profile.dasha_balance_days ?? 10);
+
+  const balTotalDays = balYears * 365.25 + balMonths * 30.4375 + balDays;
+  const firstMdEndMs = dobDate.getTime() + balTotalDays * 24 * 3600 * 1000;
+
+  let currentStartMs = dobDate.getTime();
+  let currentEndMs = firstMdEndMs;
+
+  for (let cycle = 0; cycle < 10; cycle++) {
+    const mdLord = LORDS[(startLordIdx + cycle) % 9];
+    if (cycle > 0) {
+      currentStartMs = currentEndMs;
+      const mdDays = mdLord.years * 365.25;
+      currentEndMs = currentStartMs + mdDays * 24 * 3600 * 1000;
+    }
+
+    const mdIdx = LORDS.findIndex(l => l.name === mdLord.name);
+    const mdTotalMs = currentEndMs - currentStartMs;
+    let adStartMs = currentStartMs;
+
+    for (let i = 0; i < 9; i++) {
+      const adLord = LORDS[(mdIdx + i) % 9];
+      const adFraction = adLord.years / 120.0;
+      const adDurationMs = mdTotalMs * adFraction;
+      const adEndMs = i === 8 ? currentEndMs : Math.min(currentEndMs, adStartMs + adDurationMs);
+
+      const adIdx = LORDS.findIndex(l => l.name === adLord.name);
+      let pdStartMs = adStartMs;
+      const adActualDurationMs = adEndMs - adStartMs;
+
+      for (let j = 0; j < 9; j++) {
+        const pdLord = LORDS[(adIdx + j) % 9];
+        const pdFraction = pdLord.years / 120.0;
+        const pdDurationMs = adActualDurationMs * pdFraction;
+        const pdEndMs = (j === 8 || (i === 8 && j === 8)) ? adEndMs : Math.min(adEndMs, pdStartMs + pdDurationMs);
+
+        const sStr = new Date(pdStartMs).toISOString().slice(0, 10);
+        const eStr = new Date(pdEndMs).toISOString().slice(0, 10);
+
+        intervals.push([mdLord.name, adLord.name, pdLord.name, sStr, eStr]);
+        pdStartMs = pdEndMs;
+      }
+
+      adStartMs = adEndMs;
+    }
+  }
+
+  profileTimelineCache.set(cacheKey, intervals);
+  return intervals;
+}
+
 export function getVimshottariDashaForDate(
   dateStr: string,
   customTimeline?: [string, string, string, string, string][],
