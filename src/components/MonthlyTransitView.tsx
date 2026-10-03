@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { ingestedPersonsRegistry, ALL_DASHA_TIMELINE } from '../data/apiService';
+import storedPersonsData from '../data/stored_persons.json';
 import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
 import { getVimshottariDashaForDate, DynamicDashaHierarchy } from '../data/dashaCalculator';
 import { AstroRule, DEFAULT_RULES, evaluateHouseActivations, HouseActivationResult } from '../data/ruleEngine';
@@ -195,13 +196,9 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     aspectTargets: { targetSignIndex: number; aspectType: string; aspectDegree: number }[];
   } | null>(null);
 
-  // Dynamically resolve active person profile & placements from registry
+  // Dynamically resolve active person profile & placements from registry or authoritative store
   const activeRecord = useMemo(() => {
-    return ingestedPersonsRegistry[personId] || ingestedPersonsRegistry['001ME'] || {
-      profile: samplePersonMaster,
-      placements: sampleNatalPlacements,
-      dashaRecords: ALL_DASHA_TIMELINE
-    };
+    return ingestedPersonsRegistry[personId] || (storedPersonsData as any)[personId] || ingestedPersonsRegistry['001ME'] || (storedPersonsData as any)['001ME'];
   }, [personId]);
 
   const activeProfile = activeRecord.profile;

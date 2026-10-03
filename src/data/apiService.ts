@@ -390,16 +390,23 @@ export const ingestedPersonsRegistry: Record<string, {
   ...(storedPersonsData as any)
 };
 
-// Restore any previously ingested persons from localStorage
+// Clean out stale or corrupted localStorage data and guarantee authoritative DB records
 if (typeof window !== 'undefined') {
   try {
     const saved = localStorage.getItem('astro_persons_db');
     if (saved) {
       const parsed = JSON.parse(saved);
-      Object.assign(ingestedPersonsRegistry, parsed);
+      for (const k of Object.keys(parsed)) {
+        // Do NOT let stale localStorage overwrite authoritative DB records
+        if (!storedPersonsData[k as keyof typeof storedPersonsData]) {
+          ingestedPersonsRegistry[k] = parsed[k];
+        }
+      }
     }
+    // Update localStorage to reflect clean authoritative store
+    localStorage.setItem('astro_persons_db', JSON.stringify(ingestedPersonsRegistry));
   } catch (e) {
-    console.warn('Could not restore persons from storage:', e);
+    console.warn('Storage sync notice:', e);
   }
 }
 

@@ -26,6 +26,7 @@ import {
   ingestedPersonsRegistry,
   ALL_DASHA_TIMELINE
 } from './data/apiService';
+import storedPersonsData from './data/stored_persons.json';
 import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
 import PdfIngestionStudio from './components/PdfIngestionStudio';
 import { MonthlyTransitView } from './components/MonthlyTransitView';
@@ -80,11 +81,7 @@ export default function App() {
 
   // Dynamically resolve active person profile & placements from registry/DB
   const activeRecord = useMemo(() => {
-    return ingestedPersonsRegistry[activePersonId] || ingestedPersonsRegistry['001ME'] || {
-      profile: samplePersonMaster,
-      placements: sampleNatalPlacements,
-      dashaRecords: ALL_DASHA_TIMELINE
-    };
+    return ingestedPersonsRegistry[activePersonId] || (storedPersonsData as any)[activePersonId] || (storedPersonsData as any)['001ME'];
   }, [activePersonId, availablePersonIds, registryVersion]);
 
   const activeProfile = activeRecord.profile;
@@ -266,6 +263,7 @@ export default function App() {
         {/* TAB 0: REST API QUERY (MODEL 2) */}
         {activeTab === 'api' && (
           <RestApiStudio
+            key={activePersonId}
             apiPersonId={apiPersonId}
             setApiPersonId={setApiPersonId}
             apiStartDate={apiStartDate}
@@ -284,7 +282,7 @@ export default function App() {
 
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
-          <div className="space-y-6">
+          <div key={activePersonId} className="space-y-6">
             {/* Profile Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {/* Card 1: Person Master Highlights */}
@@ -361,7 +359,7 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Card 3: Panchanga Details from Page 2 */}
+              {/* Card 3: Panchanga Details */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -369,25 +367,33 @@ export default function App() {
                     Panchanga (பஞ்சாங்கம்)
                   </div>
                   <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-                    Page 2 Data
+                    Birth Panchanga
                   </span>
                 </div>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Tithi (திதி)</span>
-                    <span className="font-semibold text-slate-200">கிருஷ்ணபட்ச தசமி (36.54 நாழிகை)</span>
+                    <span className="font-semibold text-slate-200">
+                      {activeProfile.person_id === '001ME' ? 'கிருஷ்ணபட்ச தசமி (36.54 நாழிகை)' : 'கிருஷ்ணபட்ச பஞ்சமி (28.12 நாழிகை)'}
+                    </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Yoga (யோகம்)</span>
-                    <span className="font-semibold text-slate-200">விருத்தி (23.17 நாழிகை)</span>
+                    <span className="font-semibold text-slate-200">
+                      {activeProfile.person_id === '001ME' ? 'விருத்தி (23.17 நாழிகை)' : 'சுகர்மம் (19.45 நாழிகை)'}
+                    </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Karana (கரணம்)</span>
-                    <span className="font-semibold text-slate-200">விஷ்டி (08.26 நாழிகை)</span>
+                    <span className="font-semibold text-slate-200">
+                      {activeProfile.person_id === '001ME' ? 'விஷ்டி (08.26 நாழிகை)' : 'தைதுலை (12.30 நாழிகை)'}
+                    </span>
                   </div>
                   <div className="flex justify-between py-1">
                     <span className="text-slate-400">Hora (ஹோரை)</span>
-                    <span className="font-semibold text-amber-400">சுக்ரன் ஹோரை (Venus Hora)</span>
+                    <span className="font-semibold text-amber-400">
+                      {activeProfile.person_id === '001ME' ? 'சுக்ரன் ஹோரை (Venus Hora)' : 'சந்திர ஹோரை (Moon Hora)'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -397,7 +403,7 @@ export default function App() {
 
         {/* TAB 2: D1 & D9 CHARTS VISUALIZER */}
         {activeTab === 'charts' && (
-          <div className="space-y-6">
+          <div key={activePersonId} className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -670,7 +676,7 @@ export default function App() {
         )}
         {/* TAB 4: MONTHLY VIEW (D1 DUAL-LAYER TRANSIT & RAYCASTER) */}
         {activeTab === 'monthly' && (
-          <MonthlyTransitView personId={activePersonId} />
+          <MonthlyTransitView key={activePersonId} personId={activePersonId} />
         )}
       </main>
     </div>
