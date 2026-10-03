@@ -1,5 +1,6 @@
 import { samplePersonMaster, sampleNatalPlacements, PersonMaster, NatalPlacement } from './horoscopeData';
 import { generateClientTransitTimeline, TransitEphemerisPayload } from './transitEphemeris';
+import storedPersonsData from './stored_persons.json';
 
 export interface UserQueryLog {
   id?: number;
@@ -385,16 +386,7 @@ export const ingestedPersonsRegistry: Record<string, {
   placements: NatalPlacement[];
   dashaRecords?: [string, string, string, string, string][];
 }> = {
-  '001ME': {
-    profile: samplePersonMaster,
-    placements: sampleNatalPlacements,
-    dashaRecords: ALL_DASHA_TIMELINE
-  },
-  '002KUMAR': {
-    profile: samplePersonKumar,
-    placements: samplePlacementsKumar,
-    dashaRecords: ALL_DASHA_TIMELINE
-  }
+  ...(storedPersonsData as any)
 };
 
 // Restore any previously ingested persons from localStorage
@@ -408,6 +400,22 @@ if (typeof window !== 'undefined') {
   } catch (e) {
     console.warn('Could not restore persons from storage:', e);
   }
+}
+
+export async function fetchPersonDetailsFromBackend(personId: string) {
+  try {
+    const res = await fetch(`/api/persons/${encodeURIComponent(personId)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.person) {
+        ingestedPersonsRegistry[personId] = json.person;
+        return json.person;
+      }
+    }
+  } catch (e) {
+    console.warn(`Could not fetch details for person ${personId}:`, e);
+  }
+  return ingestedPersonsRegistry[personId] || null;
 }
 
 export async function registerIngestedPerson(
@@ -451,39 +459,26 @@ export async function registerIngestedPerson(
   return { success: true, message: 'Saved to local table registry' };
 }
 
-export async function syncPersonsFromBackend(): Promise<void> {
+export async function syncPersonsFromBackend(): Promise<string[]> {
   try {
     const res = await fetch('/api/persons');
     if (res.ok) {
       const json = await res.json();
       if (Array.isArray(json.persons)) {
-        json.persons.forEach((p: any) => {
-          if (p.person_id && !ingestedPersonsRegistry[p.person_id]) {
-            ingestedPersonsRegistry[p.person_id] = {
-              profile: {
-                person_id: p.person_id,
-                person_name: p.person_name || p.person_id,
-                age: p.age || 40,
-                date_of_birth: p.date_of_birth || '1985-01-01',
-                place_of_birth: p.place_of_birth || 'Tamil Nadu, India',
-                birth_lagna: p.birth_lagna || 'Mesham (Aries)',
-                birth_rashi: p.birth_rashi || 'Rishabam (Taurus)',
-                birth_star: p.birth_star || 'Ashwini',
-                birth_star_pada: p.birth_star_pada || 1,
-                starting_dasha_lord: p.starting_dasha_lord || 'Ketu',
-                dasha_balance_years: p.dasha_balance_years || 0,
-                dasha_balance_months: p.dasha_balance_months || 0,
-                dasha_balance_days: p.dasha_balance_days || 0,
-                dasha_balance_text: p.dasha_balance_text || ''
-              },
-              placements: sampleNatalPlacements.map(pl => ({ ...pl, person_id: p.person_id })),
-              dashaRecords: ALL_DASHA_TIMELINE
-            };
+        const ids: string[] = [];
+        for (const p of json.persons) {
+          if (p.person_id) {
+            ids.push(p.person_id);
+            if (!ingestedPersonsRegistry[p.person_id] || !ingestedPersonsRegistry[p.person_id].placements) {
+              await fetchPersonDetailsFromBackend(p.person_id);
+            }
           }
-        });
+        }
+        return ids;
       }
     }
   } catch {}
+  return Object.keys(ingestedPersonsRegistry);
 }
 
 export function getRegisteredPersonList(): { id: string; name: string; lagna: string; rashi: string; star?: string; dob?: string }[] {

@@ -95,12 +95,19 @@ export function getFullVimshottariTimeline(): [string, string, string, string, s
 
 export function getVimshottariDashaForDate(
   dateStr: string,
-  customTimeline?: [string, string, string, string, string][]
+  customTimeline?: [string, string, string, string, string][],
+  profile?: any
 ): DynamicDashaHierarchy {
-  const timeline = customTimeline && customTimeline.length > 0
-    ? customTimeline
-    : getFullVimshottariTimeline();
-  const match = timeline.find(([md, ad, pd, start, end]) => dateStr >= start && dateStr <= end);
+  // 1. Try finding in customTimeline if provided
+  let match = customTimeline && customTimeline.length > 0
+    ? customTimeline.find(([md, ad, pd, start, end]) => dateStr >= start && dateStr <= end)
+    : undefined;
+
+  // 2. If no match in custom timeline, check the full universal timeline
+  if (!match) {
+    const fullTimeline = getFullVimshottariTimeline();
+    match = fullTimeline.find(([md, ad, pd, start, end]) => dateStr >= start && dateStr <= end);
+  }
 
   if (match) {
     const d1 = new Date(match[3]);
@@ -120,9 +127,9 @@ export function getVimshottariDashaForDate(
   return {
     mahadasha: "Venus (Sukra)",
     antardasha: "Saturn (Sani)",
-    pratyantardasha: "Moon (Chandra)",
-    startDate: "2027-11-27",
-    endDate: "2028-03-02",
-    totalDays: 95
+    pratyantardasha: "Mercury (Budha)",
+    startDate: "2026-08-03",
+    endDate: "2027-01-14",
+    totalDays: 164
   };
 }

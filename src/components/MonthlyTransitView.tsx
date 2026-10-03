@@ -308,6 +308,116 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     });
   }, [baseTransitPlacements, activeEffectiveOverrides, natalLagnaIdx, natalRashiIdx]);
 
+  // Days count for active selected month
+  const daysInMonth = useMemo(() => {
+    return new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  }, [selectedYear, selectedMonth]);
+
+  // Ensure selectedDay stays valid when month changes
+  React.useEffect(() => {
+    if (selectedDay > daysInMonth) {
+      setSelectedDay(daysInMonth);
+    }
+  }, [daysInMonth, selectedDay]);
+
+  // Compute all sign spans for each planet across the whole selected month
+  const monthlyGrahaSpans = useMemo(() => {
+    const grahaKeys = ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn', 'Rahu', 'Ketu'];
+    const results: {
+      graha_key: string;
+      graha_name: string;
+      graha_tamil: string;
+      sign_index: number;
+      sign_name: string;
+      sign_tamil: string;
+      start_day: number;
+      end_day: number;
+      is_exalted: boolean;
+      is_own_sign: boolean;
+      is_custom: boolean;
+    }[] = [];
+
+    for (const gKey of grahaKeys) {
+      const userOverride = activeEffectiveOverrides[gKey];
+      if (userOverride && userOverride >= 1 && userOverride <= 12) {
+        const signDef = SOUTH_INDIAN_SIGNS.find(s => s.index === userOverride) || SOUTH_INDIAN_SIGNS[0];
+        results.push({
+          graha_key: gKey,
+          graha_name: gKey,
+          graha_tamil: baseTransitPlacements.find(p => p.graha_key === gKey)?.graha_tamil || gKey,
+          sign_index: userOverride,
+          sign_name: signDef.eng,
+          sign_tamil: signDef.tamil,
+          start_day: 1,
+          end_day: daysInMonth,
+          is_exalted: (gKey === 'Venus' && userOverride === 12) || (gKey === 'Sun' && userOverride === 1) || (gKey === 'Jupiter' && userOverride === 4) || (gKey === 'Saturn' && userOverride === 7) || (gKey === 'Mars' && userOverride === 10),
+          is_own_sign: getLordOwnedSigns(gKey).includes(userOverride),
+          is_custom: true
+        });
+        continue;
+      }
+
+      let currSign = -1;
+      let spanStart = 1;
+      let samplePos: any = null;
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dt = new Date(Date.UTC(selectedYear, selectedMonth, d, 12, 0, 0));
+        const pos = getGrahaTransitPosition(gKey, dt, natalLagnaIdx, natalRashiIdx);
+        if (currSign === -1) {
+          currSign = pos.transit_rashi_index;
+          spanStart = d;
+          samplePos = pos;
+        } else if (pos.transit_rashi_index !== currSign) {
+          const signDef = SOUTH_INDIAN_SIGNS.find(s => s.index === currSign) || SOUTH_INDIAN_SIGNS[0];
+          results.push({
+            graha_key: gKey,
+            graha_name: samplePos?.graha_name || gKey,
+            graha_tamil: samplePos?.graha_tamil || gKey,
+            sign_index: currSign,
+            sign_name: signDef.eng,
+            sign_tamil: signDef.tamil,
+            start_day: spanStart,
+            end_day: d - 1,
+            is_exalted: (gKey === 'Venus' && currSign === 12) || (gKey === 'Sun' && currSign === 1) || (gKey === 'Jupiter' && currSign === 4) || (gKey === 'Saturn' && currSign === 7) || (gKey === 'Mars' && currSign === 10),
+            is_own_sign: getLordOwnedSigns(gKey).includes(currSign),
+            is_custom: false
+          });
+          currSign = pos.transit_rashi_index;
+          spanStart = d;
+          samplePos = pos;
+        }
+      }
+
+      if (currSign !== -1 && samplePos) {
+        const signDef = SOUTH_INDIAN_SIGNS.find(s => s.index === currSign) || SOUTH_INDIAN_SIGNS[0];
+        results.push({
+          graha_key: gKey,
+          graha_name: samplePos.graha_name,
+          graha_tamil: samplePos.graha_tamil,
+          sign_index: currSign,
+          sign_name: signDef.eng,
+          sign_tamil: signDef.tamil,
+          start_day: spanStart,
+          end_day: daysInMonth,
+          is_exalted: (gKey === 'Venus' && currSign === 12) || (gKey === 'Sun' && currSign === 1) || (gKey === 'Jupiter' && currSign === 4) || (gKey === 'Saturn' && currSign === 7) || (gKey === 'Mars' && currSign === 10),
+          is_own_sign: getLordOwnedSigns(gKey).includes(currSign),
+          is_custom: false
+        });
+      }
+    }
+
+    return results;
+  }, [selectedYear, selectedMonth, daysInMonth, activeEffectiveOverrides, baseTransitPlacements, natalLagnaIdx, natalRashiIdx]);
+
+  // Major Ingresses & Exaltations in the selected month for high-visibility pills
+  const monthlyKeyIngresses = useMemo(() => {
+    return monthlyGrahaSpans.filter(span => {
+      // Show planets that entered mid-month (start_day > 1) or that are exalted
+      return span.start_day > 1 || span.is_exalted;
+    });
+  }, [monthlyGrahaSpans]);
+
   // Move a planet to a new house on the chart
   const handleMoveGraha = (grahaKey: string, targetSignIndex: number) => {
     const current = stagedOverrides !== null ? { ...stagedOverrides } : { ...savedOverrides };
@@ -343,8 +453,8 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
 
   // Resolve Active Vimshottari Dasha Hierarchy for Selected Date dynamically
   const activeDashaHierarchy = useMemo(() => {
-    return getVimshottariDashaForDate(activeDateIsoStr, activeRecord.dashaRecords);
-  }, [activeDateIsoStr, activeRecord.dashaRecords]);
+    return getVimshottariDashaForDate(activeDateIsoStr, activeRecord.dashaRecords, activeRecord.profile);
+  }, [activeDateIsoStr, activeRecord.dashaRecords, activeRecord.profile]);
 
   // Houses ruled or occupied by the active PD Lord
   const pdLordOwnedSigns = useMemo(() => {
@@ -739,24 +849,68 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
 
-            {/* Intra-Month Day Selector */}
-            <div className="flex items-center gap-1 text-[11px] bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+            {/* Intra-Month Day Selector & Range Slider */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
               <span className="text-slate-400 font-medium">Day:</span>
-              {[1, 5, 10, 15, 20, 25, 28].map(d => (
+              <button
+                type="button"
+                onClick={() => setSelectedDay(prev => Math.max(1, prev - 1))}
+                className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                title="Previous Day"
+              >
+                &larr;
+              </button>
+
+              <input
+                type="range"
+                min={1}
+                max={daysInMonth}
+                value={selectedDay}
+                onChange={e => setSelectedDay(Number(e.target.value))}
+                className="w-20 sm:w-28 accent-amber-500 cursor-pointer"
+                title={`Selected Day: ${selectedDay} of ${daysInMonth}`}
+              />
+
+              <span className="font-mono font-bold text-amber-300 text-xs min-w-[20px] text-center">
+                {selectedDay}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDay(prev => Math.min(daysInMonth, prev + 1))}
+                className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                title="Next Day"
+              >
+                &rarr;
+              </button>
+
+              <div className="hidden sm:flex items-center gap-1 border-l border-slate-800 pl-2">
+                {[1, 10, 16, 20, 25].filter(d => d <= daysInMonth).map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setSelectedDay(d)}
+                    className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold transition ${
+                      selectedDay === d
+                        ? 'bg-amber-500 text-slate-950 shadow'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
                 <button
-                  key={d}
                   type="button"
-                  onClick={() => setSelectedDay(d)}
+                  onClick={() => setSelectedDay(daysInMonth)}
                   className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold transition ${
-                    selectedDay === d
+                    selectedDay === daysInMonth
                       ? 'bg-amber-500 text-slate-950 shadow'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   }`}
-                  title={`Calculate ephemeris for Day ${d}`}
                 >
-                  {d}
+                  End
                 </button>
-              ))}
+              </div>
             </div>
           </div>
 
@@ -843,6 +997,48 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
             })}
           </div>
         </div>
+
+        {/* Monthly Key Planetary Ingresses & Exaltations Strip */}
+        {monthlyKeyIngresses.length > 0 && (
+          <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>Transits &amp; Ingresses in {MONTH_NAMES[selectedMonth]} {selectedYear}:</span>
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {monthlyKeyIngresses.map((ing, idx) => {
+                const isActiveNow = selectedDay >= ing.start_day && selectedDay <= ing.end_day;
+                return (
+                  <button
+                    key={`${ing.graha_key}-${ing.sign_index}-${idx}`}
+                    type="button"
+                    onClick={() => setSelectedDay(ing.start_day)}
+                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold border flex items-center gap-1.5 transition cursor-pointer ${
+                      isActiveNow
+                        ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-300 shadow-md font-extrabold'
+                        : ing.is_exalted
+                        ? 'bg-gradient-to-r from-amber-950/70 to-slate-900 border-amber-500/60 text-amber-300 hover:border-amber-400 hover:bg-amber-900/60 shadow-sm'
+                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    }`}
+                    title={`Click to set chart date to Day ${ing.start_day} (${ing.graha_name} in ${ing.sign_name})`}
+                  >
+                    <span>{ing.graha_key}:</span>
+                    <span>{ing.sign_tamil} ({ing.sign_name.split(' ')[0]})</span>
+                    <span className="font-mono text-[9px] opacity-80">
+                      {MONTH_NAMES[selectedMonth].slice(0, 3)} {ing.start_day}–{ing.end_day}
+                    </span>
+                    {ing.is_exalted && (
+                      <span className="px-1 py-0.2 rounded bg-amber-500 text-slate-950 text-[9px] font-extrabold">
+                        ★ Exalted
+                      </span>
+                    )}
+                    {isActiveNow && <span className="text-[9px] font-extrabold">● Active</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Active Graha Drishti Raycasting Status Bar */}
@@ -1035,9 +1231,14 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                 return signNorm.includes(norm) || norm.includes(signDef.tamil);
               });
 
-              // Find Transit Occupants in this sign for selected month
+              // Find Transit Occupants in this sign for selected day
               const currentTransitsInSign = transitPlacements.filter(
                 tp => tp.transit_rashi_index === signDef.index
+              );
+
+              // Additional transits visiting this sign during the selected month (e.g. Venus in Pisces Apr 16–30 or May 1–9)
+              const monthlyVisitsForSign = monthlyGrahaSpans.filter(
+                span => span.sign_index === signDef.index && !currentTransitsInSign.some(t => t.graha_key === span.graha_key)
               );
 
               // Aspect Info for this cell if raycasting
@@ -1359,8 +1560,39 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
                       );
                     })}
 
+                    {/* MONTHLY TRANSIT VISITS (E.g. Venus in Pisces Apr 16–30 or May 1–9) */}
+                    {monthlyVisitsForSign.map(span => (
+                      <button
+                        key={`span-${span.graha_key}-${span.start_day}`}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDay(span.start_day);
+                        }}
+                        className={`w-full text-left text-[9.5px] font-bold px-1.5 py-1 rounded border flex items-center justify-between transition cursor-pointer shadow-sm ${
+                          span.is_exalted
+                            ? 'bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/70 border-amber-500/70 text-amber-200 hover:border-amber-400 hover:bg-amber-900/60 ring-1 ring-amber-500/30'
+                            : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white'
+                        }`}
+                        title={`Click to jump to Day ${span.start_day} to activate: ${span.graha_name} transits ${signDef.eng} from ${MONTH_NAMES[selectedMonth].slice(0, 3)} ${span.start_day} to ${span.end_day}`}
+                      >
+                        <span className="flex items-center gap-1 truncate">
+                          <span className="text-amber-400 text-[10px]">{span.is_exalted ? '★' : '•'}</span>
+                          <span className="font-extrabold text-amber-300">{span.graha_key}</span>
+                          <span className="text-[8px] opacity-85 font-mono text-slate-300">
+                            ({MONTH_NAMES[selectedMonth].slice(0, 3)} {span.start_day}–{span.end_day})
+                          </span>
+                        </span>
+                        {span.is_exalted && (
+                          <span className="px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[7.5px] font-extrabold shadow uppercase">
+                            Exalted
+                          </span>
+                        )}
+                      </button>
+                    ))}
+
                     {/* Empty cell indicator */}
-                    {natalOccupants.length === 0 && currentTransitsInSign.length === 0 && (
+                    {natalOccupants.length === 0 && currentTransitsInSign.length === 0 && monthlyVisitsForSign.length === 0 && (
                       <div className="text-[10px] text-slate-600 italic text-center py-2">
                         No Grahas
                       </div>

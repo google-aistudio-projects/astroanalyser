@@ -22,7 +22,9 @@ import {
   UserQueryLog,
   getRegisteredPersonList,
   syncPersonsFromBackend,
-  ingestedPersonsRegistry
+  fetchPersonDetailsFromBackend,
+  ingestedPersonsRegistry,
+  ALL_DASHA_TIMELINE
 } from './data/apiService';
 import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
 import PdfIngestionStudio from './components/PdfIngestionStudio';
@@ -70,17 +72,20 @@ export default function App() {
     return localStorage.getItem('astro_active_person_id') || '001ME';
   });
 
-  const [availablePersons, setAvailablePersons] = useState(() => getRegisteredPersonList());
+  const [availablePersonIds, setAvailablePersonIds] = useState<string[]>(() => {
+    return Object.keys(ingestedPersonsRegistry);
+  });
 
-  useEffect(() => {
-    syncPersonsFromBackend().then(() => {
-      setAvailablePersons(getRegisteredPersonList());
-    });
-  }, []);
+  // Dynamically resolve active person profile & placements from registry/DB
+  const activeRecord = useMemo(() => {
+    return ingestedPersonsRegistry[activePersonId] || ingestedPersonsRegistry['001ME'] || {
+      profile: samplePersonMaster,
+      placements: sampleNatalPlacements,
+      dashaRecords: ALL_DASHA_TIMELINE
+    };
+  }, [activePersonId, availablePersonIds]);
 
-  const refreshPersonsList = () => {
-    setAvailablePersons(getRegisteredPersonList());
-  };
+  const activeProfile = activeRecord.profile;
 
   // REST API Explorer States (Model 2)
   const [apiPersonId, setApiPersonId] = useState<string>(activePersonId);
@@ -100,6 +105,49 @@ export default function App() {
       response_payload: executeHoroscopeTimelineQuery(activePersonId, '1998-01-01', '2020-01-31')
     }
   ]);
+
+  // Single unified handler when native ID is chosen from person_master
+  const handleSelectPerson = async (newId: string) => {
+    setActivePersonId(newId);
+    setApiPersonId(newId);
+    localStorage.setItem('astro_active_person_id', newId);
+
+    // 1. Make REST call to fetch full record from DB
+    await fetchPersonDetailsFromBackend(newId);
+
+    // 2. Make REST query call to load timeline
+    const res = executeHoroscopeTimelineQuery(newId, apiStartDate, apiEndDate);
+    setApiResponse(res);
+    setQueryHistory(prev => [
+      {
+        query_id: res.unique_response_id,
+        running_number: res.running_number,
+        person_id: res.person_id,
+        start_date: apiStartDate,
+        end_date: apiEndDate,
+        created_at: new Date().toISOString(),
+        response_payload: res
+      },
+      ...prev
+    ]);
+  };
+
+  useEffect(() => {
+    syncPersonsFromBackend().then((ids) => {
+      if (ids && ids.length > 0) {
+        setAvailablePersonIds(ids);
+        if (!ids.includes(activePersonId)) {
+          handleSelectPerson(ids[0]);
+        }
+      }
+    });
+  }, []);
+
+  const refreshPersonsList = () => {
+    syncPersonsFromBackend().then((ids) => {
+      if (ids && ids.length > 0) setAvailablePersonIds(ids);
+    });
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -121,10 +169,9 @@ export default function App() {
 
   // Natal placements for selected chart and active person
   const currentChartPlacements = useMemo(() => {
-    const reg = ingestedPersonsRegistry[activePersonId] || ingestedPersonsRegistry['001ME'];
-    const placements = reg?.placements || sampleNatalPlacements;
+    const placements = activeRecord.placements || sampleNatalPlacements;
     return placements.filter(p => p.chart_type === selectedChart);
-  }, [selectedChart, activePersonId]);
+  }, [selectedChart, activeRecord]);
 
   // Lagna sign index for currently selected chart and active person
   const lagnaPlacement = currentChartPlacements.find(p => p.body_name === 'Lagna');
@@ -157,24 +204,19 @@ export default function App() {
                 Tamil Horoscope Vedic Engine
               </h1>
 
-              {/* ACTIVE NATIVE DROPDOWN (User can choose any loaded person in the DB) */}
+              {/* ACTIVE NATIVE DROPDOWN (ONLY displays IDs present in person_master) */}
               <div className="flex items-center gap-1.5 bg-slate-950/90 border border-amber-500/50 hover:border-amber-400 rounded-xl px-2.5 py-1 transition shadow-inner">
                 <User className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-[11px] text-slate-400 font-semibold">ID:</span>
                 <select
                   value={activePersonId}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    setActivePersonId(newId);
-                    setApiPersonId(newId);
-                    localStorage.setItem('astro_active_person_id', newId);
-                    setApiResponse(executeHoroscopeTimelineQuery(newId, apiStartDate, apiEndDate));
-                  }}
+                  onChange={(e) => handleSelectPerson(e.target.value)}
                   className="bg-transparent text-amber-300 font-bold text-xs focus:outline-none cursor-pointer pr-1"
-                  title="Choose native loaded in the database tables"
+                  title="Choose person ID from person_master"
                 >
-                  {availablePersons.map(p => (
-                    <option key={p.id} value={p.id} className="bg-slate-900 text-white font-medium">
-                      {p.id} • {p.name} ({p.lagna.split(' ')[0]} / {p.rashi.split(' ')[0]})
+                  {availablePersonIds.map(id => (
+                    <option key={id} value={id} className="bg-slate-900 text-white font-medium">
+                      {id}
                     </option>
                   ))}
                 </select>
@@ -192,7 +234,7 @@ export default function App() {
               { id: 'api', label: 'REST API Query Studio', icon: Server },
               { id: 'pdf_ingest', label: 'Upload & Ingest PDF', icon: UploadCloud },
               { id: 'charts', label: 'South Indian Chart Visualizer', icon: Compass },
-              { id: 'overview', label: 'Horoscope Overview (001ME)', icon: BookOpen },
+              { id: 'overview', label: `Horoscope Overview (${activePersonId})`, icon: BookOpen },
               { id: 'monthly', label: 'Monthly View', icon: CalendarDays },
             ].map(tab => {
               const Icon = tab.icon;
@@ -249,36 +291,36 @@ export default function App() {
                     <Database className="w-4 h-4 text-amber-400" />
                     person_master
                   </div>
-                  <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-                    ID: 001ME
+                  <span className="text-xs font-mono text-amber-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-amber-500/30">
+                    ID: {activeProfile.person_id}
                   </span>
                 </div>
                 <div className="space-y-2.5 text-xs">
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Person Name</span>
-                    <span className="font-semibold text-slate-200">{samplePersonMaster.person_name}</span>
+                    <span className="font-semibold text-slate-200">{activeProfile.person_name}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Calculated Age</span>
-                    <span className="font-semibold text-slate-200">{samplePersonMaster.age} yrs</span>
+                    <span className="font-semibold text-slate-200">{activeProfile.age} yrs</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Birth Lagna</span>
-                    <span className="font-semibold text-cyan-400">{samplePersonMaster.birth_lagna}</span>
+                    <span className="font-semibold text-cyan-400">{activeProfile.birth_lagna}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Birth Rashi</span>
-                    <span className="font-semibold text-rose-400">{samplePersonMaster.birth_rashi}</span>
+                    <span className="font-semibold text-rose-400">{activeProfile.birth_rashi}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/50">
                     <span className="text-slate-400">Birth Star &amp; Pada</span>
                     <span className="font-semibold text-emerald-400">
-                      {samplePersonMaster.birth_star} (Pada {samplePersonMaster.birth_star_pada})
+                      {activeProfile.birth_star} (Pada {activeProfile.birth_star_pada})
                     </span>
                   </div>
                   <div className="flex justify-between py-1">
                     <span className="text-slate-400">Starting Dasha Lord</span>
-                    <span className="font-semibold text-purple-400">{samplePersonMaster.starting_dasha_lord}</span>
+                    <span className="font-semibold text-purple-400">{activeProfile.starting_dasha_lord}</span>
                   </div>
                 </div>
               </div>
@@ -291,28 +333,28 @@ export default function App() {
                     Dasha Balance (ஆதியில் வந்த இருப்பு)
                   </div>
                   <span className="text-xs font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                    Page 3 Verified
+                    Birth Balance
                   </span>
                 </div>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs text-slate-300 font-mono">
-                  {samplePersonMaster.dasha_balance_text}
+                  {activeProfile.dasha_balance_text || `${activeProfile.dasha_balance_years}y ${activeProfile.dasha_balance_months}m ${activeProfile.dasha_balance_days}d`}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="bg-slate-800/60 p-2 rounded-lg">
-                    <div className="text-lg font-bold text-amber-400">{samplePersonMaster.dasha_balance_years}</div>
+                    <div className="text-lg font-bold text-amber-400">{activeProfile.dasha_balance_years}</div>
                     <div className="text-[11px] text-slate-400">Years</div>
                   </div>
                   <div className="bg-slate-800/60 p-2 rounded-lg">
-                    <div className="text-lg font-bold text-amber-400">{samplePersonMaster.dasha_balance_months}</div>
+                    <div className="text-lg font-bold text-amber-400">{activeProfile.dasha_balance_months}</div>
                     <div className="text-[11px] text-slate-400">Months</div>
                   </div>
                   <div className="bg-slate-800/60 p-2 rounded-lg">
-                    <div className="text-lg font-bold text-amber-400">{samplePersonMaster.dasha_balance_days}</div>
+                    <div className="text-lg font-bold text-amber-400">{activeProfile.dasha_balance_days}</div>
                     <div className="text-[11px] text-slate-400">Days</div>
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-tight">
-                  Calculated from Anuradha (அனுஷம்) Star remaining Nazhigai (11.30 நாழிகை balance in 2nd pada).
+                  Balance remaining at birth for starting lord {activeProfile.starting_dasha_lord}.
                 </p>
               </div>
 
@@ -360,7 +402,7 @@ export default function App() {
                   South Indian Chart Visualizer &amp; Relative House Numbers
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Interactive 4x4 perimeter grid. House 1 is dynamically positioned at Lagna ({selectedChart === 'D1' ? 'தனுசு / Sagittarius' : 'சிம்மம் / Leo'}), numbering 1 to 12 clockwise.
+                  Interactive 4x4 perimeter grid. House 1 is dynamically positioned at Lagna ({selectedChart === 'D1' ? activeProfile.birth_lagna : 'Navamsha Lagna'}), numbering 1 to 12 clockwise.
                 </p>
               </div>
 
@@ -610,32 +652,13 @@ export default function App() {
         {activeTab === 'pdf_ingest' && (
           <PdfIngestionStudio
             onOpenApiStudio={(pId) => {
-              setApiPersonId(pId);
+              handleSelectPerson(pId);
               setActiveTab('api');
-              setTimeout(() => {
-                const res = executeHoroscopeTimelineQuery(pId, apiStartDate, apiEndDate);
-                setApiResponse(res);
-                setQueryHistory(prev => [
-                  {
-                    query_id: res.unique_response_id,
-                    running_number: res.running_number,
-                    person_id: res.person_id,
-                    start_date: apiStartDate,
-                    end_date: apiEndDate,
-                    created_at: new Date().toISOString(),
-                    response_payload: res
-                  },
-                  ...prev
-                ]);
-              }, 100);
             }}
             onOpenCharts={() => setActiveTab('monthly')}
             onSelectPerson={(pId) => {
-              setActivePersonId(pId);
-              setApiPersonId(pId);
-              localStorage.setItem('astro_active_person_id', pId);
+              handleSelectPerson(pId);
               refreshPersonsList();
-              setApiResponse(executeHoroscopeTimelineQuery(pId, apiStartDate, apiEndDate));
             }}
             copyToClipboard={copyToClipboard}
             copied={copied}

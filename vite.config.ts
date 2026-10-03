@@ -20,6 +20,11 @@ function astroApiPlugin(): Plugin {
               const content = fs.readFileSync(dataPath, 'utf-8');
               const db = JSON.parse(content || '{}');
               const persons = Object.values(db).map((item: any) => item.profile);
+              persons.sort((a: any, b: any) => {
+                if (a.person_id === '001ME') return -1;
+                if (b.person_id === '001ME') return 1;
+                return a.person_id.localeCompare(b.person_id);
+              });
               res.statusCode = 200;
               res.end(JSON.stringify({ persons }));
               return;
@@ -29,6 +34,27 @@ function astroApiPlugin(): Plugin {
           }
           res.statusCode = 200;
           res.end(JSON.stringify({ persons: [] }));
+          return;
+        }
+
+        // 1b. GET /api/persons/:id - Fetch full person record from DB
+        const getPersonMatch = url.match(/^\/api\/persons\/([A-Za-z0-9_\-]+)$/);
+        if (getPersonMatch && req.method === 'GET') {
+          const pid = getPersonMatch[1];
+          res.setHeader('Content-Type', 'application/json');
+          try {
+            const dataPath = path.resolve(__dirname, 'src/data/stored_persons.json');
+            if (fs.existsSync(dataPath)) {
+              const db = JSON.parse(fs.readFileSync(dataPath, 'utf-8') || '{}');
+              if (db[pid]) {
+                res.statusCode = 200;
+                res.end(JSON.stringify({ success: true, person: db[pid] }));
+                return;
+              }
+            }
+          } catch (e: any) {}
+          res.statusCode = 404;
+          res.end(JSON.stringify({ success: false, error: `Person ${pid} not found in database.` }));
           return;
         }
 

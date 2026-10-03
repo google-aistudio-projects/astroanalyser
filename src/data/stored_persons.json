@@ -228,10 +228,10 @@
       }
     ]
   },
-  "002KUMAR": {
+  "404": {
     "profile": {
-      "person_id": "002KUMAR",
-      "person_name": "Kumar (Tamil Horoscope)",
+      "person_id": "404",
+      "person_name": "Native 404",
       "age": 42,
       "date_of_birth": "1984-07-18",
       "place_of_birth": "Chennai, Tamil Nadu",
@@ -247,7 +247,7 @@
     },
     "placements": [
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Lagna",
         "rashi_name": "Mesham (Aries)",
@@ -258,7 +258,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Moon (Chandra)",
         "rashi_name": "Rishabam (Taurus)",
@@ -269,7 +269,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Venus (Sukra)",
         "rashi_name": "Rishabam (Taurus)",
@@ -280,7 +280,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Sun (Surya)",
         "rashi_name": "Katakam (Cancer)",
@@ -291,7 +291,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Mercury (Budha)",
         "rashi_name": "Simham (Leo)",
@@ -302,7 +302,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Mars (Sevvai)",
         "rashi_name": "Thulaam (Libra)",
@@ -313,7 +313,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Saturn (Sani)",
         "rashi_name": "Thulaam (Libra)",
@@ -324,7 +324,7 @@
         "is_retrograde": true
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Jupiter (Guru)",
         "rashi_name": "Dhanus (Sagittarius)",
@@ -335,7 +335,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Rahu",
         "rashi_name": "Rishabam (Taurus)",
@@ -346,7 +346,7 @@
         "is_retrograde": false
       },
       {
-        "person_id": "002KUMAR",
+        "person_id": "404",
         "chart_type": "D1",
         "body_name": "Ketu",
         "rashi_name": "Vrischigam (Scorpio)",
