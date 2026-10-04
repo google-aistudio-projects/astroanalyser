@@ -570,15 +570,22 @@ export class QwenLocalAdapter implements ILLMAdapter {
     };
 
     let connectionError: string | undefined;
+    const LOCAL_TIMEOUT_MS = 180000; // Strict 180 seconds upper ceiling
+    const controller = new AbortController();
+    const timeoutTimer = setTimeout(() => {
+      controller.abort();
+    }, LOCAL_TIMEOUT_MS);
 
     try {
-      // USER CONSTRAINT: Removed timeout factor completely for local execution.
-      // The request will wait as long as the local hardware needs without being aborted.
+      // 180-second hard timeout: if hardware is struggling, safely abort and purge VRAM
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutTimer);
 
       if (res.ok) {
         const json = await res.json();
@@ -643,7 +650,12 @@ export class QwenLocalAdapter implements ILLMAdapter {
         }
       }
     } catch (err: any) {
-      connectionError = err.message || 'Failed to connect to http://localhost:11434 (Check if Ollama is running)';
+      clearTimeout(timeoutTimer);
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        connectionError = 'Local LLM timed out (>180s): Struggling to interpret this complex multi-domain dataset on current hardware within 180 seconds. Aborted and reverted to Parashara analytical synthesis.';
+      } else {
+        connectionError = err.message || 'Failed to connect to http://localhost:11434 (Check if Ollama is running)';
+      }
       purgeOllamaMemory(targetModel, endpoint).catch(() => {});
     }
 
