@@ -112,6 +112,24 @@ export interface VedicHouseContext {
   };
 }
 
+export interface SupplementaryDomainScenario {
+  id: 'career_job' | 'love_romance' | 'health_vitality' | 'finance_wealth' | 'family_home';
+  title: string;
+  verdict: 'Favorable Expansion' | 'Moderate Progress' | 'Frictional Delay' | 'Caution Required' | string;
+  confidenceScore: number;
+  timingWindow: string;
+  astrologicalReasoning: string;
+  practicalGuidance: string;
+}
+
+export interface NatalPromiseVsTransitDelivery {
+  natalPromiseScore: number;
+  natalPromiseVerdict: string;
+  transitDeliveryScore: number;
+  transitDeliveryVerdict: string;
+  synthesisVerdict: string;
+}
+
 export interface LLMThreePartNarrative {
   part1_probabilityAndScope: string;
   part2_financialAndResources: string;
@@ -122,6 +140,12 @@ export interface LLMThreePartNarrative {
   rawMarkdown: string;
   providerUsed: LLMProviderId;
   executionTimeMs: number;
+
+  // Natal Promise vs. Transit Strength Dual Evaluation
+  natalPromiseVsTransitDelivery?: NatalPromiseVsTransitDelivery;
+
+  // Supplementary Cross-Domain Karakatwa Scenarios (Career, Love/Crush, Health, Finance, Family)
+  supplementaryScenarios?: SupplementaryDomainScenario[];
 
   // Private LLM Verification & Wire Telemetry
   endpointUsed: string;

@@ -27,7 +27,8 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
-  FileText
+  FileText,
+  Layers
 } from 'lucide-react';
 import {
   LLMProviderId,
@@ -53,6 +54,14 @@ const SAMPLE_QUICK_CHIPS = [
   'How does the active PD Lord impact this Bhava?'
 ];
 
+const DOMAIN_ICONS: Record<string, string> = {
+  career_job: '💼',
+  love_romance: '❤️',
+  health_vitality: '🩺',
+  finance_wealth: '💰',
+  family_home: '🏡'
+};
+
 export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
   isOpen,
   onClose,
@@ -61,6 +70,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
   onChangeProvider
 }) => {
   const [queryText, setQueryText] = useState<string>('');
+  const [activeDomainTab, setActiveDomainTab] = useState<string>('career_job');
   const [isListening, setIsListening] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [narrative, setNarrative] = useState<LLMThreePartNarrative | null>(null);
@@ -974,6 +984,51 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                 {narrative.summarySentence}
               </div>
 
+              {/* DUAL EVALUATION: NATAL PROMISE VS. GOCHARA TRANSIT STRENGTH */}
+              {narrative.natalPromiseVsTransitDelivery && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                      <ShieldCheck className="w-4 h-4 text-amber-400" />
+                      <span>Natal Karmic Promise vs. Gochara Transit Delivery Capacity</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      Net Probability: {(narrative.overallConfidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-semibold">1. Natal Promise (D1/D9 Birth Grid)</span>
+                        <span className="text-amber-400 font-bold font-mono">
+                          {((narrative.natalPromiseVsTransitDelivery.natalPromiseScore || 0.88) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-normal">
+                        {narrative.natalPromiseVsTransitDelivery.natalPromiseVerdict}
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-semibold">2. Transit Delivery (Rule 5 Gochara)</span>
+                        <span className="text-cyan-400 font-bold font-mono">
+                          {((narrative.natalPromiseVsTransitDelivery.transitDeliveryScore || 0.78) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-normal">
+                        {narrative.natalPromiseVsTransitDelivery.transitDeliveryVerdict}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                    <strong className="text-amber-300">Synthesis Verdict:</strong> {narrative.natalPromiseVsTransitDelivery.synthesisVerdict}
+                  </div>
+                </div>
+              )}
+
               {/* PART 1: EVENT PROBABILITY & SCOPE */}
               <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
@@ -1019,6 +1074,100 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                   {narrative.part3_microTimingWindow}
                 </p>
               </div>
+
+              {/* SUPPLEMENTARY CROSS-DOMAIN SCENARIOS (CAREER, LOVE/CRUSH, HEALTH, FINANCE, FAMILY) */}
+              {narrative.supplementaryScenarios && narrative.supplementaryScenarios.length > 0 && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between border-b border-slate-800/80 pb-2.5 gap-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-amber-400" />
+                        <span>Supplementary Cross-Domain Readouts (House {context.houseNumber} Impact)</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        How this month's primary house activation impacts other vital life areas via Bhavat Bhavam &amp; Drishti
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                      5 Scenarios Evaluated
+                    </span>
+                  </div>
+
+                  {/* Domain Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {narrative.supplementaryScenarios.map(sc => (
+                      <button
+                        key={sc.id}
+                        onClick={() => setActiveDomainTab(sc.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer ${
+                          activeDomainTab === sc.id
+                            ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                        }`}
+                      >
+                        <span>{DOMAIN_ICONS[sc.id] || '✨'}</span>
+                        <span>{sc.title.split(' ')[0]}</span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-black/20">
+                          {(sc.confidenceScore * 100).toFixed(0)}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Selected Domain Scenario Content */}
+                  {(() => {
+                    const selectedSc = narrative.supplementaryScenarios?.find(s => s.id === activeDomainTab) || narrative.supplementaryScenarios?.[0];
+                    if (!selectedSc) return null;
+                    return (
+                      <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{DOMAIN_ICONS[selectedSc.id] || '✨'}</span>
+                            <span className="font-bold text-white text-xs">{selectedSc.title}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              selectedSc.verdict.toLowerCase().includes('favor')
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                : selectedSc.verdict.toLowerCase().includes('caution') || selectedSc.verdict.toLowerCase().includes('friction')
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            }`}>
+                              {selectedSc.verdict}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-400 font-mono text-[11px]">Sub-Window:</span>
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold font-mono text-[11px]">
+                              {selectedSc.timingWindow}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-bold font-mono text-[11px]">
+                              Confidence: {(selectedSc.confidenceScore * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+                            Astrological Causal Reasoning (Drishti &amp; Karakatwa Interconnection):
+                          </span>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            {selectedSc.astrologicalReasoning}
+                          </p>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
+                          <span className="text-[10px] uppercase font-bold text-amber-400 block mb-0.5">
+                            Actionable Real-World Guidance:
+                          </span>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            {selectedSc.practicalGuidance}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* PDF EXPORT BANNER */}
               <div className="p-3 bg-slate-950/80 border border-amber-500/40 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">

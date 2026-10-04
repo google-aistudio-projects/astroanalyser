@@ -323,6 +323,28 @@ export function generateVedicPdfReport(
     [255, 255, 255]
   );
 
+  // SUPPLEMENTARY CROSS-DOMAIN SCENARIOS IN PDF
+  if (narrative.supplementaryScenarios && narrative.supplementaryScenarios.length > 0) {
+    checkPageBreak(25);
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(margin, y, contentWidth, 7, 1.5, 1.5, 'F');
+    doc.setTextColor(245, 158, 11);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text('SUPPLEMENTARY CROSS-DOMAIN IMPACT READOUTS (BHAVAT BHAVAM & DRISHTI)', margin + 4, y + 4.8);
+    y += 9;
+
+    for (const sc of narrative.supplementaryScenarios) {
+      renderPartBlock(
+        `${sc.title.toUpperCase()} [${sc.verdict}]`,
+        `Reasoning: ${sc.astrologicalReasoning}\n\nActionable Guidance: ${sc.practicalGuidance}`,
+        `Window: ${sc.timingWindow} | Confidence: ${(sc.confidenceScore * 100).toFixed(0)}%`,
+        [79, 70, 229], // Indigo
+        [248, 250, 252]
+      );
+    }
+  }
+
   // WIRE AUDIT FOOTER NOTE
   checkPageBreak(16);
   doc.setFillColor(241, 245, 249);
