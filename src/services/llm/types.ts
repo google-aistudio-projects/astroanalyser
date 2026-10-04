@@ -110,6 +110,7 @@ export interface VedicHouseContext {
     pdScore: number;
     pdDignity: string;
   };
+  language?: 'en' | 'ta';
 }
 
 export interface SupplementaryDomainScenario {

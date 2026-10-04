@@ -70,6 +70,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
   onChangeProvider
 }) => {
   const [queryText, setQueryText] = useState<string>('');
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ta'>('en');
   const [activeDomainTab, setActiveDomainTab] = useState<string>('career_job');
   const [isListening, setIsListening] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -135,14 +136,14 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
     }
   }, [isOpen, activeProvider]);
 
-  // Initialize synthesis when context changes
+  // Initialize synthesis when context changes or language changes
   useEffect(() => {
     if (isOpen && context) {
       handleGenerate();
     } else {
       stopSpeech();
     }
-  }, [isOpen, context?.houseNumber, activeProvider, localOllamaModel]);
+  }, [isOpen, context?.houseNumber, activeProvider, localOllamaModel, selectedLanguage]);
 
   // Clean up speech when unmounting or closing
   useEffect(() => {
@@ -170,6 +171,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
       const result = await llmService.generate(activeProvider, {
         ...context,
         userQuery: q || undefined,
+        language: selectedLanguage,
         selectedLocalModel: localOllamaModel,
         customPromptOverride: promptToSend
       });
@@ -187,7 +189,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
 
   const handleResetPromptToDefault = () => {
     if (context) {
-      const fresh = buildVedicPrompt({ ...context, customPromptOverride: undefined }, activeProvider);
+      const fresh = buildVedicPrompt({ ...context, language: selectedLanguage, customPromptOverride: undefined }, activeProvider);
       setEditablePrompt(fresh);
       setIsPromptCustomized(false);
     }
@@ -249,7 +251,7 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.lang = 'en-US';
+      recognition.lang = selectedLanguage === 'ta' ? 'ta-IN' : 'en-US';
 
       recognition.onstart = () => setIsListening(true);
       recognition.onresult = (event: any) => {
@@ -285,11 +287,16 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
 
     window.speechSynthesis.cancel();
 
-    const fullSpeechText = `Astrological Synthesis for House ${context?.houseNumber}. ${narrative.summarySentence}. Part 1: Event Probability and Scope. ${narrative.part1_probabilityAndScope}. Part 2: Financial and Resource Sources. ${narrative.part2_financialAndResources}. Part 3: Micro-Timing Window. ${narrative.part3_microTimingWindow}.`;
+    const fullSpeechText = selectedLanguage === 'ta'
+      ? `${context?.tamilName} ராசி 4-ஆம் பாவ பலன்கள். ${narrative.summarySentence}. பகுதி 1: நிகழ்வு சாத்தியக்கூறு. ${narrative.part1_probabilityAndScope}. பகுதி 2: நிதி மற்றும் மூலதன ஆதாரங்கள். ${narrative.part2_financialAndResources}. பகுதி 3: முக்கிய காலகட்டம். ${narrative.part3_microTimingWindow}.`
+      : `Astrological Synthesis for House ${context?.houseNumber}. ${narrative.summarySentence}. Part 1: Event Probability and Scope. ${narrative.part1_probabilityAndScope}. Part 2: Financial and Resource Sources. ${narrative.part2_financialAndResources}. Part 3: Micro-Timing Window. ${narrative.part3_microTimingWindow}.`;
 
     const utterance = new SpeechSynthesisUtterance(fullSpeechText);
     utterance.rate = speechRate;
     utterance.pitch = 1.0;
+    if (selectedLanguage === 'ta') {
+      utterance.lang = 'ta-IN';
+    }
 
     utterance.onend = () => setIsPlayingAudio(false);
     utterance.onerror = () => setIsPlayingAudio(false);
@@ -528,6 +535,30 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                   {rate}x
                 </button>
               ))}
+            </div>
+
+            {/* Language Switcher: EN vs தமிழ் */}
+            <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5" title="Switch inference language (English / தமிழ்)">
+              <button
+                onClick={() => setSelectedLanguage('en')}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                  selectedLanguage === 'en'
+                    ? 'bg-amber-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setSelectedLanguage('ta')}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                  selectedLanguage === 'ta'
+                    ? 'bg-amber-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                தமிழ்
+              </button>
             </div>
           </div>
         </div>
