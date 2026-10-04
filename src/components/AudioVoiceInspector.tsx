@@ -35,7 +35,7 @@ import {
   VedicHouseContext,
   LLMThreePartNarrative
 } from '../services/llm/types';
-import { llmService, checkOllamaHealth, purgeOllamaMemory } from '../services/llm/adapters';
+import { llmService, checkOllamaHealth, purgeOllamaMemory, buildVedicPrompt } from '../services/llm/adapters';
 import { generateVedicPdfReport } from '../services/pdfReportGenerator';
 
 interface AudioVoiceInspectorProps {
@@ -86,6 +86,20 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
   // Recognition ref
   const recognitionRef = useRef<any>(null);
 
+  // Interactive Prompt Studio State
+  const [editablePrompt, setEditablePrompt] = useState<string>('');
+  const [isPromptCustomized, setIsPromptCustomized] = useState<boolean>(false);
+  const [showPromptStudio, setShowPromptStudio] = useState<boolean>(false);
+
+  // Synchronize System Prompt when context or provider changes
+  useEffect(() => {
+    if (context) {
+      const generated = buildVedicPrompt({ ...context, customPromptOverride: undefined }, activeProvider);
+      setEditablePrompt(generated);
+      setIsPromptCustomized(false);
+    }
+  }, [context?.houseNumber, context?.selectedMonth, context?.selectedYear, context?.activationScore, activeProvider]);
+
   // Timer for generation
   useEffect(() => {
     let timer: any;
@@ -132,23 +146,40 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
     };
   }, []);
 
-  const handleGenerate = async (customQuery?: string) => {
+  const handleGenerate = async (customQuery?: string, promptOverrideToUse?: string) => {
     if (!context) return;
     stopSpeech();
     setIsGenerating(true);
 
     try {
       const q = customQuery !== undefined ? customQuery : queryText;
+      const promptToSend = promptOverrideToUse !== undefined
+        ? promptOverrideToUse
+        : (isPromptCustomized && editablePrompt.trim().length > 0 ? editablePrompt : undefined);
+
       const result = await llmService.generate(activeProvider, {
         ...context,
         userQuery: q || undefined,
-        selectedLocalModel: localOllamaModel
+        selectedLocalModel: localOllamaModel,
+        customPromptOverride: promptToSend
       });
       setNarrative(result);
     } catch (e) {
       console.error('LLM synthesis error:', e);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRefireWithCustomPrompt = () => {
+    handleGenerate(undefined, editablePrompt);
+  };
+
+  const handleResetPromptToDefault = () => {
+    if (context) {
+      const fresh = buildVedicPrompt({ ...context, customPromptOverride: undefined }, activeProvider);
+      setEditablePrompt(fresh);
+      setIsPromptCustomized(false);
     }
   };
 
@@ -799,6 +830,87 @@ export const AudioVoiceInspector: React.FC<AudioVoiceInspectorProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* INTERACTIVE PROMPT STUDIO & PAYLOAD EDITOR */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+            <div className="flex flex-wrap items-center justify-between px-3.5 py-2.5 bg-slate-900/80 border-b border-slate-800/80 gap-2">
+              <button
+                onClick={() => setShowPromptStudio(!showPromptStudio)}
+                className="flex items-center gap-2 text-xs font-bold text-slate-200 hover:text-amber-300 transition"
+                title="Click to view and edit the raw astrological prompt sent to the LLM"
+              >
+                <Code className="w-4 h-4 text-amber-400" />
+                <span>Prompt &amp; Astrological Payload Studio</span>
+                {isPromptCustomized ? (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    Modified by User
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    System Generated
+                  </span>
+                )}
+                {showPromptStudio ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+              </button>
+
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  onClick={handleResetPromptToDefault}
+                  disabled={!isPromptCustomized}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 transition"
+                  title="Reset prompt back to system-generated astronomical ephemeris payload"
+                >
+                  <RotateCcw className="w-3 h-3 text-slate-400" />
+                  <span>Reset Prompt</span>
+                </button>
+
+                <button
+                  onClick={() => handleCopy(editablePrompt, 'studio-prompt')}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                >
+                  {copied === 'studio-prompt' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                  <span>{copied === 'studio-prompt' ? 'Copied' : 'Copy'}</span>
+                </button>
+
+                <button
+                  onClick={handleRefireWithCustomPrompt}
+                  disabled={isGenerating}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition shadow disabled:opacity-50"
+                  title="Trigger the LLM using this exact prompt payload"
+                >
+                  {isGenerating ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3 fill-current" />}
+                  <span>Refire LLM</span>
+                </button>
+              </div>
+            </div>
+
+            {showPromptStudio && (
+              <div className="p-3 bg-slate-950/90 space-y-2 border-t border-slate-800">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                  <span>Review and edit prompt instructions, flattened natal positions, or Moon transit triggers:</span>
+                  <span className="text-amber-400 font-semibold">
+                    {editablePrompt.length} chars &bull; ~{Math.round(editablePrompt.length / 4)} tokens
+                  </span>
+                </div>
+                <textarea
+                  value={editablePrompt}
+                  onChange={e => {
+                    setEditablePrompt(e.target.value);
+                    setIsPromptCustomized(true);
+                  }}
+                  rows={12}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-3 font-mono text-[11px] text-slate-200 focus:outline-none focus:border-amber-500 transition leading-relaxed resize-y selection:bg-amber-500/30"
+                  placeholder="System prompt will populate here..."
+                />
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Tip: Make direct edits above (e.g. adjust house questions or focus) and click <strong>"Refire LLM"</strong> to test live.</span>
+                  {isPromptCustomized && (
+                    <span className="text-amber-300 font-bold">● User custom override active</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* TELEMETRY STRIP */}

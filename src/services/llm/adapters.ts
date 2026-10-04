@@ -34,57 +34,132 @@ const MONTH_NAMES = [
 /**
  * Builds the canonical Vedic reasoning prompt based on the native's chart and active transit context
  */
-function buildVedicPrompt(context: VedicHouseContext, providerName: string): string {
+export function buildVedicPrompt(context: VedicHouseContext, providerName: string): string {
+  // If user provided a customized prompt override in the interactive studio, respect it directly!
+  if (context.customPromptOverride && context.customPromptOverride.trim().length > 0) {
+    return context.customPromptOverride;
+  }
+
   const bhavaInfo = BHAVA_NAMES[context.houseNumber] || {
     title: `House ${context.houseNumber}`,
     karakas: 'Planetary lords',
     financialRole: 'General financial domain'
   };
 
-  const natalStr = context.natalOccupants.length > 0
-    ? context.natalOccupants.map(o => `${o.body_name} (Sputa: ${o.degree_sputa || 'N/A'})`).join(', ')
-    : 'None (Vacant / Empty House)';
+  const monthName = MONTH_NAMES[context.selectedMonth] || 'Active Month';
 
-  const transitStr = context.transitOccupants.length > 0
-    ? context.transitOccupants.map(t => `${t.graha_key}${t.is_custom ? ' [User-Adjusted Chart Transit]' : ''} ${t.is_retrograde ? '[R]' : ''} (Sputa: ${t.degree_sputa || 'N/A'})`).join(', ')
-    : 'No Direct Transit Ingress';
+  // 1. Flattened Natal D1 Placements table
+  const natalD1Table = (context.flattenedNatalD1 && context.flattenedNatalD1.length > 0)
+    ? context.flattenedNatalD1.map(p => 
+        `  • ${p.body_name.padEnd(9)}: ${p.rashi_name} (H${p.house_number || '?'}) | Sputa: ${p.degree_sputa || 'N/A'} | Nakshatra: ${p.nakshatra_name || 'N/A'} (Pada ${p.pada || '?'}) ${p.is_retrograde ? '[R]' : ''}`
+      ).join('\n')
+    : (context.natalOccupants.length > 0
+        ? context.natalOccupants.map(o => `  • ${o.body_name} (Sputa: ${o.degree_sputa || 'N/A'}, Nakshatra: ${o.nakshatra_name || 'N/A'})`).join('\n')
+        : '  • None (Empty Bhava)');
 
+  // 2. Flattened Natal D9 Navamsha table
+  const natalD9Table = (context.flattenedNatalD9 && context.flattenedNatalD9.length > 0)
+    ? context.flattenedNatalD9.map(p => `  • ${p.body_name.padEnd(9)}: ${p.rashi_name} | Sputa: ${p.degree_sputa || 'N/A'}`).join('\n')
+    : '  • Standard D9 placements align with natal varga grid';
+
+  // 3. Gochara Transits in target sign (including user drag-and-drop overrides)
+  const transitTable = context.transitOccupants.length > 0
+    ? context.transitOccupants.map(t => 
+        `  • ${t.graha_key}${t.is_custom ? ' [USER DRAG-AND-DROP ADJUSTED OVERRIDE]' : ''} ${t.is_retrograde ? '[R]' : ''} (Sputa: ${t.degree_sputa || 'N/A'}, Nakshatra: ${t.nakshatra_name || 'N/A'})`
+      ).join('\n')
+    : '  • No Direct Transit Ingress in this sign';
+
+  // 4. Moon (Chandra) 2.25-day Sign Progression Timeline
+  const moonSpansTable = (context.monthlyMoonSpans && context.monthlyMoonSpans.length > 0)
+    ? context.monthlyMoonSpans.map(m => 
+        `  • ${m.label} ${m.houseNumber === context.houseNumber ? '===> [DIRECT TRANSIT OVER TARGET HOUSE] <===' : [1, 4, 5, 7, 9, 10, 11].includes(m.houseNumber) ? '[Kendra/Trikona Angle]' : ''}`
+      ).join('\n')
+    : '  • Moon completes one 360-degree zodiacal circuit through 12 signs (~2.25 days per sign)';
+
+  // 5. Fast Graha Ingress Events
+  const ingressTable = (context.monthlyIngressEvents && context.monthlyIngressEvents.length > 0)
+    ? context.monthlyIngressEvents.map(e => `  • ${e}`).join('\n')
+    : '  • Major slow Grahas maintain sign stability; fast Grahas transition per ephemeris.';
+
+  // 6. Dasha Triad Delivery Report (Rule 5)
+  const dashaDelivery = context.dashaDeliveryReport
+    ? `Dasha Triad Delivery Index: ${(context.dashaDeliveryReport.overallIndex * 100).toFixed(0)}% (${context.dashaDeliveryReport.status})
+  - MD Lord (${context.activeDasha.mahadasha}): ${context.dashaDeliveryReport.mdDignity} [Score: ${context.dashaDeliveryReport.mdScore.toFixed(2)}]
+  - AD Lord (${context.activeDasha.antardasha}): ${context.dashaDeliveryReport.adDignity} [Score: ${context.dashaDeliveryReport.adScore.toFixed(2)}]
+  - PD Lord (${context.activeDasha.pratyantardasha}): ${context.dashaDeliveryReport.pdDignity} [Score: ${context.dashaDeliveryReport.pdScore.toFixed(2)}]`
+    : `Active Vimshottari Hierarchy: MD: ${context.activeDasha.mahadasha} > AD: ${context.activeDasha.antardasha} > PD: ${context.activeDasha.pratyantardasha}`;
+
+  // 7. Matched Rules
   const rulesStr = context.matchedRules.length > 0
     ? context.matchedRules.map(r => `• ${r.ruleName} (Weight: ${r.weight}): ${r.reason}`).join('\n')
-    : 'No high-weight rules triggered';
-
-  const monthName = MONTH_NAMES[context.selectedMonth] || 'Active Month';
+    : '• Baseline house evaluation';
 
   return `You are an elite Vedic Astrologer & Data Reasoning Engine synthesizing monthly transit activations under classical Parashara and Jaimini principles.
 
-ASTROLOGICAL TELEMETRY CONTEXT:
+======================================================================
+1. TARGET BHAVA & TEMPORAL HORIZON
+======================================================================
 - Targeted House: House ${context.houseNumber} (${bhavaInfo.title})
 - Rashi Sign: ${context.rashiName} (${context.tamilName}) ${context.isLagna ? '[Lagna Sign / 1st House]' : ''}
 - Evaluation Month: ${monthName} ${context.selectedYear}
-- Natal Birth Occupants: ${natalStr}
-- Transiting Gochara Grahas: ${transitStr}
-- Active Vimshottari Dasha Hierarchy:
-    Maha Dasha (MD): ${context.activeDasha.mahadasha}
-    Antar Dasha (AD): ${context.activeDasha.antardasha}
-    Pratyantar Dasha (PD Lord): ${context.activeDasha.pratyantardasha} (Active Period: ${context.activeDasha.startDate} to ${context.activeDasha.endDate})
-- Astrological Rule Engine Score: ${context.activationScore.toFixed(2)} / 1.00 (${context.isEventActive ? 'CRITICAL EVENT EMITTING' : 'Standard Inactive Baseline'})
+- Code Rule Engine Activation Score: ${context.activationScore.toFixed(2)} / 1.00 (${context.isEventActive ? 'CRITICAL EVENT EMITTING (Threshold >= 0.55 crossed)' : 'Standard Preparatory / Baseline'})
 - Matched Classical Rules:
 ${rulesStr}
 
-USER SPECIFIC QUERY:
-"${context.userQuery || `Provide a complete astrological evaluation for House ${context.houseNumber} in ${monthName} ${context.selectedYear}`}"
+======================================================================
+2. COMPLETE FLATTENED NATAL DATASET (D1 & D9 PLACEMENTS)
+======================================================================
+NATAL D1 (RASI KUNDALI):
+${natalD1Table}
 
-TASK & FORMATTING REQUIREMENT:
-Provide a rigorous, definitive 3-Part Synthesized Narrative strictly following this schema. Do NOT give vague generalizations. Give specific dates and financial mechanisms.
+NATAL D9 (NAVAMSHA KUNDALI):
+${natalD9Table}
 
-Return ONLY a valid JSON object matching this exact structure:
+======================================================================
+3. GOCHARA (TRANSIT) DATASET FOR TARGET SIGN (INCL. USER OVERRIDES)
+======================================================================
+${transitTable}
+
+======================================================================
+4. CHANDRA (MOON) 2.25-DAY SIGN PROGRESSION ACROSS ${monthName.toUpperCase()} ${context.selectedYear}
+(Chandra is the psychological catalyst and real-time trigger for event fruition)
+======================================================================
+${moonSpansTable}
+
+======================================================================
+5. PLANETARY INGRESS EVENTS IN ${monthName.toUpperCase()} ${context.selectedYear}
+======================================================================
+${ingressTable}
+
+======================================================================
+6. VIMSHOTTARI DASHA HIERARCHY & DELIVERY CAPACITY (RULE 5)
+======================================================================
+${dashaDelivery}
+Active PD Window: ${context.activeDasha.startDate} to ${context.activeDasha.endDate}
+
+======================================================================
+7. USER SPECIFIC INQUIRY
+======================================================================
+"${context.userQuery || `Provide a definitive astrological evaluation for House ${context.houseNumber} in ${monthName} ${context.selectedYear}`}"
+
+======================================================================
+8. TASK & FORMATTING INSTRUCTIONS
+======================================================================
+Synthesize a rigorous, grounded 3-Part Vedic Narrative.
+CRITICAL TIMING REQUIREMENTS:
+- Do NOT use hardcoded date clichés. Derive the "peakDateRange" STRICTLY from:
+  1) The specific days when the Moon transits directly through House ${context.houseNumber} or casts a 7th/trinal Drishti upon it (consult Section 4 above).
+  2) Or the dates of fast Graha ingress into or aspecting this Bhava (consult Section 5 above).
+- Derive "overallConfidence" as a floating-point number between 0.00 and 1.00 directly calculated from the Code Rule Engine Score (${context.activationScore.toFixed(2)}) and the Dasha Delivery Index.
+
+Return ONLY a valid, raw JSON object matching this schema (do NOT include markdown code blocks or surrounding commentary):
 {
   "summarySentence": "Crisp one-sentence bottom-line synthesis of the event activation.",
   "part1_probabilityAndScope": "Detailed breakdown of Event Probability & Scope based on House ${context.houseNumber} significations and the active PD Lord (${context.activeDasha.pratyantardasha}) authority. State clearly whether the event will manifest and why.",
   "part2_financialAndResources": "Detailed analysis of Financial & Resource Sources. Map the exact origin of capital (e.g. 2nd house liquid savings, 4th house property loans, 9th house fortune/inheritance, 11th house profits/gains) required for or generated by this event.",
-  "part3_microTimingWindow": "Exact 3 to 7 day peak activation window within ${monthName} ${context.selectedYear}. State the specific calendar dates when Gochara transit angles align with the PD Lord.",
-  "peakDateRange": "${monthName} 12 - 18, ${context.selectedYear}",
-  "overallConfidence": 0.88
+  "part3_microTimingWindow": "Exact 3 to 7 day peak activation window within ${monthName} ${context.selectedYear}. Name the exact calendar days when transiting Moon or fast planets trigger this Bhava.",
+  "peakDateRange": "${monthName} DD – DD, ${context.selectedYear} (Derived strictly from Moon or ingress schedule)",
+  "overallConfidence": 0.85
 }`;
 }
 
@@ -107,18 +182,34 @@ function synthesizeAnalyticalVedicNarrative(
   const score = context.activationScore;
   const isHigh = context.isEventActive || score >= 0.55;
 
-  // Determine micro-timing window based on house and selected month days
-  const startDay = ((context.houseNumber * 2 + context.selectedMonth * 3) % 20) + 5;
-  const endDay = Math.min(startDay + 5, 28);
-  const peakDateRange = `${monthName} ${startDay} – ${endDay}, ${context.selectedYear}`;
+  // Derive micro-timing window dynamically from actual Moon transit spans if available!
+  let peakDateRange = '';
+  if (context.monthlyMoonSpans && context.monthlyMoonSpans.length > 0) {
+    const directMoonSpan = context.monthlyMoonSpans.find(m => m.houseNumber === context.houseNumber);
+    const aspectingMoonSpan = context.monthlyMoonSpans.find(m => 
+      ((m.houseNumber + 6 - 1) % 12) + 1 === context.houseNumber || // 7th aspect
+      ((m.houseNumber + 4 - 1) % 12) + 1 === context.houseNumber || // 5th aspect
+      ((m.houseNumber + 8 - 1) % 12) + 1 === context.houseNumber    // 9th aspect
+    );
+    const chosenSpan = directMoonSpan || aspectingMoonSpan || context.monthlyMoonSpans[0];
+    peakDateRange = `${monthName} ${chosenSpan.startDay} – ${chosenSpan.endDay}, ${context.selectedYear}`;
+  } else {
+    const startDay = ((context.houseNumber * 2 + context.selectedMonth * 3) % 20) + 5;
+    const endDay = Math.min(startDay + 4, 28);
+    peakDateRange = `${monthName} ${startDay} – ${endDay}, ${context.selectedYear}`;
+  }
+
+  // Derive dynamic confidence score
+  const deliveryIndex = context.dashaDeliveryReport ? context.dashaDeliveryReport.overallIndex : 0.70;
+  const computedConfidence = parseFloat(Math.min(0.98, Math.max(0.40, (score * 0.6 + deliveryIndex * 0.4))).toFixed(2));
 
   const summary = isHigh
     ? `House ${context.houseNumber} (${context.rashiName}) experiences peak Gochara activation under the command of PD Lord ${pdLord}, unlocking high event manifestation.`
     : `House ${context.houseNumber} remains in an incubating preparatory phase with baseline activation score (${score.toFixed(2)}).`;
 
   const part1 = isHigh
-    ? `Event Probability is assessed at ${(score * 100).toFixed(0)}% (High Probability). The operational Pratyantar Dasha (PD) lord ${context.activeDasha.pratyantardasha} establishes direct governance over this Bhava (${bhava.title}). Because ${context.matchedRules.map(r => r.ruleName).join(' and ')} are actively aligned, the significations of ${context.rashiName} (${context.tamilName}) will materialize with tangible real-world outcomes rather than mere psychological desire.`
-    : `Event Probability is moderate-to-low (${(score * 100).toFixed(0)}%). While the natal foundation retains latent potential in ${context.rashiName}, the current Gochara transits provide insufficient trigger energy this month. Manifestation is delayed until the PD lord transitions into an aspecting trinal angle.`;
+    ? `Event Probability is assessed at ${(computedConfidence * 100).toFixed(0)}% (High Probability). The operational Pratyantar Dasha (PD) lord ${context.activeDasha.pratyantardasha} establishes direct governance over this Bhava (${bhava.title}). Because ${context.matchedRules.map(r => r.ruleName).join(' and ')} are actively aligned, the significations of ${context.rashiName} (${context.tamilName}) will materialize with tangible real-world outcomes rather than mere psychological desire.`
+    : `Event Probability is moderate-to-low (${(computedConfidence * 100).toFixed(0)}%). While the natal foundation retains latent potential in ${context.rashiName}, the current Gochara transits provide insufficient trigger energy this month. Manifestation is delayed until the PD lord transitions into an aspecting trinal angle.`;
 
   const part2 = context.houseNumber === 2 || context.houseNumber === 11
     ? `Financial inflows originate directly from Dhana (2nd) liquid reserves and Labha (11th) milestone profits. PD Lord ${pdLord} stimulates immediate liquidity, enabling capital accumulation and dividend yields.`
@@ -128,12 +219,13 @@ function synthesizeAnalyticalVedicNarrative(
     ? `Funding draws upon Bhagya (9th) ancestral fortune and Randhra (8th) joint-venture spousal or unearned windfalls. Unexpected financial relief occurs through legacy settlements or insurance maturity.`
     : `Financial dynamics for House ${context.houseNumber} rely on ${bhava.financialRole}. Capital liquidity from the 2nd house and 11th house gains provides the necessary balance sheet strength.`;
 
-  const part3 = `The micro-timing window peaks between ${peakDateRange}. During this 6-day interval, the Moon's transit casts a direct trinal aspect into ${context.rashiName}, while transiting ${context.transitOccupants[0]?.graha_key || 'benefics'} reach optimal degree sputa parity with the natal degree grid. This is the prime action window for initiating decisions.`;
+  const part3 = `The micro-timing window peaks between ${peakDateRange}. During this interval, transiting Moon traverses the key trigger degree arc relative to ${context.rashiName}, while transiting ${context.transitOccupants[0]?.graha_key || 'planets'} synchronize with the natal degree grid. This represents the primary action window for concrete progress.`;
 
   const rawMarkdown = `### Astrological Reasoning & Micro-Timing Report (${provider.toUpperCase()})
 **Target:** House ${context.houseNumber} (${context.rashiName} / ${context.tamilName})  
 **Timeline:** ${monthName} ${context.selectedYear} | **PD Lord:** ${context.activeDasha.pratyantardasha}  
-**Activation Score:** ${score.toFixed(2)} / 1.00  
+**Activation Score:** ${score.toFixed(2)} / 1.00 | **Delivery Capacity:** ${((deliveryIndex) * 100).toFixed(0)}%  
+**Peak Micro-Window:** ${peakDateRange}  
 
 ---
 #### 1. Event Probability & Scope
@@ -151,7 +243,7 @@ ${part3}
     part2_financialAndResources: part2,
     part3_microTimingWindow: part3,
     summarySentence: summary,
-    overallConfidence: isHigh ? 0.91 : 0.72,
+    overallConfidence: computedConfidence,
     peakDateRange,
     rawMarkdown,
     providerUsed: provider,
@@ -169,7 +261,7 @@ ${part3}
     rawResponseBody: {
       status: 'synthesized_analytical_parashara',
       summary,
-      confidence: isHigh ? 0.91 : 0.72,
+      confidence: computedConfidence,
       microWindow: peakDateRange
     }
   };

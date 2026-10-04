@@ -390,3 +390,72 @@ export function generateClientTransitTimeline(
     major_transits_timeline: timelineEvents
   };
 }
+
+export interface MonthlyMoonSpan {
+  startDay: number;
+  endDay: number;
+  signIndex: number;
+  signName: string;
+  signTamil: string;
+  houseNumber: number;
+  label: string;
+}
+
+/**
+ * Calculates Moon's (Chandra's) ~2.25-day sign progression across the selected month.
+ * Chandra is the mental trigger and immediate day-to-day fruition manifestor.
+ */
+export function calculateMonthlyMoonSpans(
+  year: number,
+  month: number, // 0..11
+  natalLagnaIdx: number = 9
+): MonthlyMoonSpan[] {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const dailyPositions: Array<{ day: number; signIndex: number }> = [];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(Date.UTC(year, month, d, 12, 0, 0));
+    const pos = getGrahaTransitPosition('Moon', dt, natalLagnaIdx);
+    dailyPositions.push({ day: d, signIndex: pos.transit_rashi_index });
+  }
+
+  const spans: MonthlyMoonSpan[] = [];
+  let currentSpan: { startDay: number; endDay: number; signIndex: number } | null = null;
+
+  for (const dp of dailyPositions) {
+    if (!currentSpan) {
+      currentSpan = { startDay: dp.day, endDay: dp.day, signIndex: dp.signIndex };
+    } else if (currentSpan.signIndex === dp.signIndex) {
+      currentSpan.endDay = dp.day;
+    } else {
+      const meta = RASHI_LIST_META.find(r => r.index === currentSpan!.signIndex) || RASHI_LIST_META[0];
+      const hNum = ((currentSpan!.signIndex - natalLagnaIdx + 12) % 12) + 1;
+      spans.push({
+        startDay: currentSpan!.startDay,
+        endDay: currentSpan!.endDay,
+        signIndex: currentSpan!.signIndex,
+        signName: meta.eng,
+        signTamil: meta.tamil,
+        houseNumber: hNum,
+        label: `Day ${currentSpan!.startDay}–${currentSpan!.endDay}: Moon in ${meta.eng.split(' ')[0]} (${meta.tamil}) [House ${hNum}]`
+      });
+      currentSpan = { startDay: dp.day, endDay: dp.day, signIndex: dp.signIndex };
+    }
+  }
+
+  if (currentSpan) {
+    const meta = RASHI_LIST_META.find(r => r.index === currentSpan.signIndex) || RASHI_LIST_META[0];
+    const hNum = ((currentSpan.signIndex - natalLagnaIdx + 12) % 12) + 1;
+    spans.push({
+      startDay: currentSpan.startDay,
+      endDay: currentSpan.endDay,
+      signIndex: currentSpan.signIndex,
+      signName: meta.eng,
+      signTamil: meta.tamil,
+      houseNumber: hNum,
+      label: `Day ${currentSpan.startDay}–${currentSpan.endDay}: Moon in ${meta.eng.split(' ')[0]} (${meta.tamil}) [House ${hNum}]`
+    });
+  }
+
+  return spans;
+}

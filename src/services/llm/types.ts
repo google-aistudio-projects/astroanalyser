@@ -75,6 +75,41 @@ export interface VedicHouseContext {
   selectedYear: number;
   userQuery?: string;
   selectedLocalModel?: string;
+  customPromptOverride?: string;
+  flattenedNatalD1?: Array<{
+    body_name: string;
+    rashi_name: string;
+    degree_sputa?: string;
+    nakshatra_name?: string;
+    pada?: number;
+    house_number?: number;
+    is_retrograde?: boolean;
+  }>;
+  flattenedNatalD9?: Array<{
+    body_name: string;
+    rashi_name: string;
+    degree_sputa?: string;
+  }>;
+  monthlyMoonSpans?: Array<{
+    startDay: number;
+    endDay: number;
+    signIndex: number;
+    signName: string;
+    signTamil: string;
+    houseNumber: number;
+    label: string;
+  }>;
+  monthlyIngressEvents?: Array<string>;
+  dashaDeliveryReport?: {
+    overallIndex: number;
+    status: string;
+    mdScore: number;
+    mdDignity: string;
+    adScore: number;
+    adDignity: string;
+    pdScore: number;
+    pdDignity: string;
+  };
 }
 
 export interface LLMThreePartNarrative {

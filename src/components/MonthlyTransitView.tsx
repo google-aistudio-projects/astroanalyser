@@ -31,9 +31,9 @@ import {
 import { samplePersonMaster, sampleNatalPlacements } from '../data/horoscopeData';
 import { ingestedPersonsRegistry, ALL_DASHA_TIMELINE } from '../data/apiService';
 import storedPersonsData from '../data/stored_persons.json';
-import { getGrahaTransitPosition, RASHI_LIST_META } from '../data/transitEphemeris';
+import { getGrahaTransitPosition, RASHI_LIST_META, calculateMonthlyMoonSpans, MonthlyMoonSpan } from '../data/transitEphemeris';
 import { getVimshottariDashaForDate, DynamicDashaHierarchy } from '../data/dashaCalculator';
-import { AstroRule, DEFAULT_RULES, evaluateHouseActivations, HouseActivationResult } from '../data/ruleEngine';
+import { AstroRule, DEFAULT_RULES, evaluateHouseActivations, HouseActivationResult, calculateDashaDeliveryFactor, DashaDeliveryReport } from '../data/ruleEngine';
 import { AudioVoiceInspector } from './AudioVoiceInspector';
 import { LLMProviderId, LLM_PROVIDERS, VedicHouseContext } from '../services/llm/types';
 
@@ -521,6 +521,59 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
   const [inspectorHouseContext, setInspectorHouseContext] = useState<VedicHouseContext | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
 
+  // Compute Moon (Chandra) 2.25-day sign progression across the selected month
+  const monthlyMoonSpans = useMemo(() => {
+    return calculateMonthlyMoonSpans(selectedYear, selectedMonth, natalLagnaIdx);
+  }, [selectedYear, selectedMonth, natalLagnaIdx]);
+
+  // Compute Fast-Moving Grahas Ingress Events
+  const monthlyIngressEvents = useMemo(() => {
+    const events: string[] = [];
+    const fastGrahas = ['Sun', 'Mercury', 'Venus', 'Mars'];
+    for (const g of fastGrahas) {
+      const spans = monthlyGrahaSpans.filter(s => s.graha_key === g);
+      if (spans.length > 1) {
+        for (let i = 1; i < spans.length; i++) {
+          events.push(`${g} enters ${spans[i].sign_name.split(' ')[0]} on Day ${spans[i].start_day}`);
+        }
+      } else if (spans.length === 1) {
+        events.push(`${g} transits continuously in ${spans[0].sign_name.split(' ')[0]} (Days 1–${daysInMonth})`);
+      }
+    }
+    return events;
+  }, [monthlyGrahaSpans, daysInMonth]);
+
+  // Compute Rule 5: Dasha Triad Delivery Capacity Report
+  const dashaDeliveryReport = useMemo(() => {
+    const transitWithAspects = transitPlacements.map(tp => ({
+      graha_key: tp.graha_key,
+      transit_rashi_index: tp.transit_rashi_index,
+      aspect_targets: calculateGrahaDrishti(tp.transit_rashi_index, tp.graha_key).map(a => a.targetSignIndex)
+    }));
+
+    const natalSimple = natalD1Placements.map(np => {
+      const signMeta = SOUTH_INDIAN_SIGNS.find(s => {
+        const norm = np.rashi_name.toLowerCase();
+        return s.eng.toLowerCase().includes(norm) || norm.includes(s.tamil);
+      });
+      return {
+        body_name: np.body_name,
+        rashi_index: signMeta ? signMeta.index : 9
+      };
+    });
+
+    return calculateDashaDeliveryFactor({
+      natalLagnaIdx,
+      natalRashiIdx,
+      activePdLord: activeDashaHierarchy.pratyantardasha,
+      activeAdLord: activeDashaHierarchy.antardasha,
+      activeMdLord: activeDashaHierarchy.mahadasha,
+      pdLordOwnedSigns,
+      transitPlanets: transitWithAspects,
+      natalPlanets: natalSimple
+    });
+  }, [transitPlacements, natalD1Placements, natalLagnaIdx, natalRashiIdx, activeDashaHierarchy, pdLordOwnedSigns]);
+
   const handleOpenHouseInspector = (signIndex: number) => {
     const signDef = SOUTH_INDIAN_SIGNS.find(s => s.index === signIndex);
     if (!signDef) return;
@@ -539,6 +592,36 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
     );
 
     const houseActivation = houseActivations.find(ha => ha.signIndex === signDef.index);
+
+    // Full flattened D1 placements with house numbers and nakshatras
+    const flattenedD1 = activeRecord.placements
+      .filter(p => p.chart_type === 'D1')
+      .map(p => {
+        const signMeta = SOUTH_INDIAN_SIGNS.find(s => {
+          const norm = p.rashi_name.toLowerCase();
+          return s.eng.toLowerCase().includes(norm) || norm.includes(s.tamil);
+        });
+        const sIdx = signMeta ? signMeta.index : 9;
+        const hNum = ((sIdx - natalLagnaIdx + 12) % 12) + 1;
+        return {
+          body_name: p.body_name,
+          rashi_name: p.rashi_name,
+          degree_sputa: p.degree_sputa,
+          nakshatra_name: p.nakshatra_name,
+          pada: p.pada,
+          house_number: hNum,
+          is_retrograde: p.is_retrograde
+        };
+      });
+
+    // Full flattened D9 placements
+    const flattenedD9 = activeRecord.placements
+      .filter(p => p.chart_type === 'D9')
+      .map(p => ({
+        body_name: p.body_name,
+        rashi_name: p.rashi_name,
+        degree_sputa: p.degree_sputa
+      }));
 
     const ctx: VedicHouseContext = {
       houseNumber: houseNum,
@@ -568,7 +651,12 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
       })),
       activeDasha: activeDashaHierarchy,
       selectedMonth,
-      selectedYear
+      selectedYear,
+      flattenedNatalD1: flattenedD1,
+      flattenedNatalD9: flattenedD9,
+      monthlyMoonSpans,
+      monthlyIngressEvents,
+      dashaDeliveryReport
     };
 
     setInspectorHouseContext(ctx);
@@ -1661,11 +1749,23 @@ export const MonthlyTransitView: React.FC<MonthlyTransitViewProps> = ({ personId
 
         {/* Live Activated Houses Summary Pill Strip */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
             <span className="font-semibold text-slate-200">
               Active Event Houses for {MONTH_NAMES[selectedMonth]} {selectedYear}:
             </span>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-700/50 text-[11px] font-mono">
+              <span className="text-slate-400">Rule 5 Delivery:</span>
+              <span className={`font-bold ${
+                dashaDeliveryReport.status === 'High Fruition'
+                  ? 'text-emerald-400'
+                  : dashaDeliveryReport.status === 'Moderate Manifestation'
+                  ? 'text-amber-400'
+                  : 'text-rose-400'
+              }`}>
+                {(dashaDeliveryReport.overallIndex * 100).toFixed(0)}% ({dashaDeliveryReport.status})
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
