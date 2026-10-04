@@ -79,36 +79,68 @@ def get_fallback_data(person_id: str, start_date: str, end_date: str):
     norm_start = normalize_date(start_date, default_to_end_of_month=False)
     norm_end = normalize_date(end_date, default_to_end_of_month=True)
 
-    person_profile = {
-        "person_id": "001ME",
-        "person_name": "ME",
-        "age": 50,
-        "date_of_birth": "1976-01-26",
-        "place_of_birth": "Tamil Nadu, India",
-        "birth_lagna": "Dhanus (Sagittarius)",
-        "birth_rashi": "Vrischigam (Scorpio)",
-        "birth_star": "Anusham (Anuradha)",
-        "birth_star_pada": 2,
-        "starting_dasha_lord": "Saturn (Sani)",
-        "dasha_balance_years": 13,
-        "dasha_balance_months": 2,
-        "dasha_balance_days": 5,
-        "dasha_balance_text": "13-வருஷம் 2-மாதம் 5-நாள் 31-நாழி 47-விநாடி"
-    }
+    # Try loading from stored_persons.json
+    db = {}
+    stored_path = os.path.join(os.path.dirname(__file__), "src", "data", "stored_persons.json")
+    if os.path.exists(stored_path):
+        try:
+            import json
+            with open(stored_path, "r", encoding="utf-8") as f:
+                db = json.load(f)
+        except Exception:
+            pass
 
-    d1_bodies = [
-        {"body_name": "Lagna", "rashi_name": "Dhanus (Sagittarius)", "house_number": 1, "nakshatra_name": "Purva Ashadha", "pada": 1, "degree_sputa": "16° 33'", "is_retrograde": False},
-        {"body_name": "Venus (Sukra)", "rashi_name": "Dhanus (Sagittarius)", "house_number": 1, "nakshatra_name": "Mula", "pada": 2, "degree_sputa": "06° 08'", "is_retrograde": False},
-        {"body_name": "Sun (Surya)", "rashi_name": "Makaram (Capricorn)", "house_number": 2, "nakshatra_name": "Shravana", "pada": 1, "degree_sputa": "11° 37'", "is_retrograde": False},
-        {"body_name": "Mercury (Budha)", "rashi_name": "Makaram (Capricorn)", "house_number": 2, "nakshatra_name": "Uttara Ashadha", "pada": 3, "degree_sputa": "05° 15'", "is_retrograde": True},
-        {"body_name": "Jupiter (Guru)", "rashi_name": "Meenam (Pisces)", "house_number": 4, "nakshatra_name": "Revathi", "pada": 3, "degree_sputa": "24° 42'", "is_retrograde": False},
-        {"body_name": "Ketu", "rashi_name": "Mesham (Aries)", "house_number": 5, "nakshatra_name": "Bharani", "pada": 4, "degree_sputa": "24° 25'", "is_retrograde": False},
-        {"body_name": "Mars (Sevvai)", "rashi_name": "Rishabam (Taurus)", "house_number": 6, "nakshatra_name": "Rohini", "pada": 4, "degree_sputa": "21° 23'", "is_retrograde": False},
-        {"body_name": "Saturn (Sani)", "rashi_name": "Katakam (Cancer)", "house_number": 8, "nakshatra_name": "Pushya", "pada": 1, "degree_sputa": "05° 57'", "is_retrograde": True},
-        {"body_name": "Mandi (Gulika)", "rashi_name": "Kanni (Virgo)", "house_number": 10, "nakshatra_name": "Hasta", "pada": 2, "degree_sputa": "14° 42'", "is_retrograde": False},
-        {"body_name": "Rahu", "rashi_name": "Thulaam (Libra)", "house_number": 11, "nakshatra_name": "Vishakha", "pada": 2, "degree_sputa": "24° 25'", "is_retrograde": False},
-        {"body_name": "Moon (Chandra)", "rashi_name": "Vrischigam (Scorpio)", "house_number": 12, "nakshatra_name": "Anuradha", "pada": 2, "degree_sputa": "07° 24'", "is_retrograde": False}
-    ]
+    person_rec = db.get(person_id) or db.get("001ME")
+    if person_rec:
+        person_profile = person_rec.get("profile", {})
+        placements = person_rec.get("placements", [])
+        d1_bodies = [p for p in placements if p.get("chart_type") == "D1"]
+        d9_bodies = [p for p in placements if p.get("chart_type") == "D9"]
+    else:
+        person_profile = {
+            "person_id": "001ME",
+            "person_name": "ME",
+            "age": 50,
+            "date_of_birth": "1976-01-26",
+            "place_of_birth": "Tamil Nadu, India",
+            "birth_lagna": "Dhanus (Sagittarius)",
+            "birth_rashi": "Vrischigam (Scorpio)",
+            "birth_star": "Anusham (Anuradha)",
+            "birth_star_pada": 2,
+            "starting_dasha_lord": "Saturn (Sani)",
+            "dasha_balance_years": 13,
+            "dasha_balance_months": 2,
+            "dasha_balance_days": 5,
+            "dasha_balance_text": "13-வருஷம் 2-மாதம் 5-நாள் 31-நாழி 47-விநாடி"
+        }
+
+        d1_bodies = [
+            {"body_name": "Lagna", "rashi_name": "Dhanus (Sagittarius)", "house_number": 1, "nakshatra_name": "Purva Ashadha", "pada": 1, "degree_sputa": "16° 33'", "is_retrograde": False},
+            {"body_name": "Venus (Sukra)", "rashi_name": "Dhanus (Sagittarius)", "house_number": 1, "nakshatra_name": "Mula", "pada": 2, "degree_sputa": "06° 08'", "is_retrograde": False},
+            {"body_name": "Sun (Surya)", "rashi_name": "Makaram (Capricorn)", "house_number": 2, "nakshatra_name": "Shravana", "pada": 1, "degree_sputa": "11° 37'", "is_retrograde": False},
+            {"body_name": "Mercury (Budha)", "rashi_name": "Makaram (Capricorn)", "house_number": 2, "nakshatra_name": "Uttara Ashadha", "pada": 3, "degree_sputa": "05° 15'", "is_retrograde": True},
+            {"body_name": "Jupiter (Guru)", "rashi_name": "Meenam (Pisces)", "house_number": 4, "nakshatra_name": "Revathi", "pada": 3, "degree_sputa": "24° 42'", "is_retrograde": False},
+            {"body_name": "Ketu", "rashi_name": "Mesham (Aries)", "house_number": 5, "nakshatra_name": "Bharani", "pada": 4, "degree_sputa": "24° 25'", "is_retrograde": False},
+            {"body_name": "Mars (Sevvai)", "rashi_name": "Rishabam (Taurus)", "house_number": 6, "nakshatra_name": "Rohini", "pada": 4, "degree_sputa": "21° 23'", "is_retrograde": False},
+            {"body_name": "Saturn (Sani)", "rashi_name": "Katakam (Cancer)", "house_number": 8, "nakshatra_name": "Pushya", "pada": 1, "degree_sputa": "05° 57'", "is_retrograde": True},
+            {"body_name": "Mandi (Gulika)", "rashi_name": "Kanni (Virgo)", "house_number": 10, "nakshatra_name": "Hasta", "pada": 2, "degree_sputa": "14° 42'", "is_retrograde": False},
+            {"body_name": "Rahu", "rashi_name": "Thulaam (Libra)", "house_number": 11, "nakshatra_name": "Vishakha", "pada": 2, "degree_sputa": "24° 25'", "is_retrograde": False},
+            {"body_name": "Moon (Chandra)", "rashi_name": "Vrischigam (Scorpio)", "house_number": 12, "nakshatra_name": "Anuradha", "pada": 2, "degree_sputa": "07° 24'", "is_retrograde": False}
+        ]
+
+        d9_bodies = [
+            {"body_name": "Lagna", "rashi_name": "Simham (Leo)", "house_number": 1, "is_retrograde": False},
+            {"body_name": "Rahu", "rashi_name": "Kanni (Virgo)", "house_number": 2, "is_retrograde": False},
+            {"body_name": "Venus (Sukra)", "rashi_name": "Thulaam (Libra)", "house_number": 3, "is_retrograde": False},
+            {"body_name": "Mercury (Budha)", "rashi_name": "Thulaam (Libra)", "house_number": 3, "is_retrograde": False},
+            {"body_name": "Saturn (Sani)", "rashi_name": "Vrischigam (Scorpio)", "house_number": 4, "is_retrograde": False},
+            {"body_name": "Moon (Chandra)", "rashi_name": "Vrischigam (Scorpio)", "house_number": 4, "is_retrograde": False},
+            {"body_name": "Sun (Surya)", "rashi_name": "Makaram (Capricorn)", "house_number": 6, "is_retrograde": False},
+            {"body_name": "Mandi (Gulika)", "rashi_name": "Makaram (Capricorn)", "house_number": 6, "is_retrograde": False},
+            {"body_name": "Ketu", "rashi_name": "Meenam (Pisces)", "house_number": 8, "is_retrograde": False},
+            {"body_name": "Jupiter (Guru)", "rashi_name": "Meenam (Pisces)", "house_number": 8, "is_retrograde": False},
+            {"body_name": "Mars (Sevvai)", "rashi_name": "Katakam (Cancer)", "house_number": 12, "is_retrograde": False}
+        ]
 
     d9_bodies = [
         {"body_name": "Lagna", "rashi_name": "Simham (Leo)", "house_number": 1, "is_retrograde": False},

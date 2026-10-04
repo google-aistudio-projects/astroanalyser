@@ -7,10 +7,8 @@ import {
   Info,
   Server,
   Table,
-  BookOpen,
-  UploadCloud,
-  Database,
-  User
+  User,
+  Database
 } from 'lucide-react';
 import {
   samplePersonMaster,
@@ -23,12 +21,10 @@ import {
   getRegisteredPersonList,
   syncPersonsFromBackend,
   fetchPersonDetailsFromBackend,
-  ingestedPersonsRegistry,
-  ALL_DASHA_TIMELINE
+  ingestedPersonsRegistry
 } from './data/apiService';
 import storedPersonsData from './data/stored_persons.json';
 import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
-import PdfIngestionStudio from './components/PdfIngestionStudio';
 import { MonthlyTransitView } from './components/MonthlyTransitView';
 
 // Standard 12 South Indian chart cell coordinate mappings (row, col)
@@ -64,24 +60,26 @@ const SOUTH_INDIAN_CELLS: ChartCellDef[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'api' | 'pdf_ingest' | 'charts' | 'overview' | 'monthly'>('monthly');
+  const [activeTab, setActiveTab] = useState<'charts' | 'monthly' | 'api'>('charts');
   const [selectedChart, setSelectedChart] = useState<'D1' | 'D9'>('D1');
   const [copied, setCopied] = useState<string | null>(null);
 
-  // Active Native Profile (Supports any person loaded in the DB)
-  const [activePersonId, setActivePersonId] = useState<string>(() => {
-    return localStorage.getItem('astro_active_person_id') || '001ME';
-  });
+  // Active Native Profile (Directly loaded from authoritative store, no stale caching)
+  const [activePersonId, setActivePersonId] = useState<string>('001ME');
 
   const [availablePersonIds, setAvailablePersonIds] = useState<string[]>(() => {
-    return Object.keys(ingestedPersonsRegistry);
+    return Object.keys(storedPersonsData);
   });
 
   const [registryVersion, setRegistryVersion] = useState(0);
 
   // Dynamically resolve active person profile & placements from registry/DB
   const activeRecord = useMemo(() => {
-    return ingestedPersonsRegistry[activePersonId] || (storedPersonsData as any)[activePersonId] || (storedPersonsData as any)['001ME'];
+    return (
+      ingestedPersonsRegistry[activePersonId] ||
+      (storedPersonsData as any)[activePersonId] ||
+      (storedPersonsData as any)['001ME']
+    );
   }, [activePersonId, availablePersonIds, registryVersion]);
 
   const activeProfile = activeRecord.profile;
@@ -109,13 +107,12 @@ export default function App() {
   const handleSelectPerson = async (newId: string) => {
     setActivePersonId(newId);
     setApiPersonId(newId);
-    localStorage.setItem('astro_active_person_id', newId);
 
-    // 1. Make REST call to fetch full record from DB
+    // 1. Fetch fresh record from DB
     await fetchPersonDetailsFromBackend(newId);
     setRegistryVersion(v => v + 1);
 
-    // 2. Make REST query call to load timeline
+    // 2. Query timeline for new person
     const res = executeHoroscopeTimelineQuery(newId, apiStartDate, apiEndDate);
     setApiResponse(res);
     setQueryHistory(prev => [
@@ -175,9 +172,15 @@ export default function App() {
 
   // Lagna sign index for currently selected chart and active person
   const lagnaPlacement = currentChartPlacements.find(p => p.body_name === 'Lagna');
-  const lagnaSignIndex = lagnaPlacement
-    ? SOUTH_INDIAN_CELLS.find(c => c.engSign === lagnaPlacement.rashi_name)?.signIndex || 9
-    : 9;
+  const lagnaSignIndex = useMemo(() => {
+    if (!lagnaPlacement) return 9;
+    const rName = (lagnaPlacement.rashi_name || '').toLowerCase();
+    const cell = SOUTH_INDIAN_CELLS.find(c => {
+      const eSign = c.engSign.toLowerCase();
+      return rName.includes(eSign.split(' ')[0]) || eSign.includes(rName.split(' ')[0]);
+    });
+    return cell ? cell.signIndex : 9;
+  }, [lagnaPlacement]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -207,12 +210,12 @@ export default function App() {
               {/* ACTIVE NATIVE DROPDOWN (ONLY displays IDs present in person_master) */}
               <div className="flex items-center gap-1.5 bg-slate-950/90 border border-amber-500/50 hover:border-amber-400 rounded-xl px-2.5 py-1 transition shadow-inner">
                 <User className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px] text-slate-400 font-semibold">ID:</span>
+                <span className="text-[11px] text-slate-400 font-semibold">Native ID:</span>
                 <select
                   value={activePersonId}
                   onChange={(e) => handleSelectPerson(e.target.value)}
                   className="bg-transparent text-amber-300 font-bold text-xs focus:outline-none cursor-pointer pr-1"
-                  title="Choose person ID from person_master"
+                  title="Choose person ID from person_master table"
                 >
                   {availablePersonIds.map(id => (
                     <option key={id} value={id} className="bg-slate-900 text-white font-medium">
@@ -228,14 +231,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* Clean Navigation Menu Items */}
+          {/* Clean 3 Navigation Menu Items */}
           <nav className="flex items-center gap-1.5 flex-wrap">
             {[
-              { id: 'api', label: 'REST API Query Studio', icon: Server },
-              { id: 'pdf_ingest', label: 'Upload & Ingest PDF', icon: UploadCloud },
               { id: 'charts', label: 'South Indian Chart Visualizer', icon: Compass },
-              { id: 'overview', label: `Horoscope Overview (${activePersonId})`, icon: BookOpen },
               { id: 'monthly', label: 'Monthly View', icon: CalendarDays },
+              { id: 'api', label: 'SAP Query Studio', icon: Server },
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -243,9 +244,9 @@ export default function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
                     isActive
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-bold'
                       : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-700/60'
                   }`}
                 >

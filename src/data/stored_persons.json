@@ -437,5 +437,45 @@
         "is_retrograde": false
       }
     ]
+  },
+  "002KUMAR": {
+    "profile": {
+      "person_id": "002KUMAR",
+      "person_name": "Kumar (Reg. 002KUMAR)",
+      "age": 42,
+      "date_of_birth": "1984-07-18",
+      "place_of_birth": "Chennai, Tamil Nadu",
+      "birth_lagna": "Mesham (Aries)",
+      "birth_rashi": "Rishabam (Taurus)",
+      "birth_star": "Rohini (Moon Lord)",
+      "birth_star_pada": 1,
+      "starting_dasha_lord": "Moon (Chandra)",
+      "dasha_balance_years": 7,
+      "dasha_balance_months": 5,
+      "dasha_balance_days": 10,
+      "dasha_balance_text": "7-வருஷம் 5-மாதம் 10-நாள்"
+    },
+    "placements": [
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Lagna", "rashi_name": "Mesham (Aries)", "house_number": 1, "nakshatra_name": "Ashwini", "pada": 1, "degree_sputa": "02° 15'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Moon (Chandra)", "rashi_name": "Rishabam (Taurus)", "house_number": 2, "nakshatra_name": "Rohini", "pada": 1, "degree_sputa": "11° 40'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Venus (Sukra)", "rashi_name": "Rishabam (Taurus)", "house_number": 2, "nakshatra_name": "Krittika", "pada": 3, "degree_sputa": "04° 10'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Sun (Surya)", "rashi_name": "Katakam (Cancer)", "house_number": 4, "nakshatra_name": "Pushya", "pada": 2, "degree_sputa": "02° 22'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Mercury (Budha)", "rashi_name": "Simham (Leo)", "house_number": 5, "nakshatra_name": "Magha", "pada": 3, "degree_sputa": "09° 12'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Mars (Sevvai)", "rashi_name": "Thulaam (Libra)", "house_number": 7, "nakshatra_name": "Swati", "pada": 2, "degree_sputa": "15° 30'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Saturn (Sani)", "rashi_name": "Thulaam (Libra)", "house_number": 7, "nakshatra_name": "Vishakha", "pada": 1, "degree_sputa": "20° 45'", "is_retrograde": true },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Jupiter (Guru)", "rashi_name": "Dhanus (Sagittarius)", "house_number": 9, "nakshatra_name": "Mula", "pada": 4, "degree_sputa": "12° 50'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Rahu", "rashi_name": "Rishabam (Taurus)", "house_number": 2, "nakshatra_name": "Rohini", "pada": 2, "degree_sputa": "14° 05'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D1", "body_name": "Ketu", "rashi_name": "Vrischigam (Scorpio)", "house_number": 8, "nakshatra_name": "Anuradha", "pada": 4, "degree_sputa": "14° 05'", "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Lagna", "rashi_name": "Mesham (Aries)", "house_number": 1, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Moon (Chandra)", "rashi_name": "Mesham (Aries)", "house_number": 1, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Saturn (Sani)", "rashi_name": "Mesham (Aries)", "house_number": 1, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Rahu", "rashi_name": "Rishabam (Taurus)", "house_number": 2, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Mercury (Budha)", "rashi_name": "Mithunam (Gemini)", "house_number": 3, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Jupiter (Guru)", "rashi_name": "Katakam (Cancer)", "house_number": 4, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Sun (Surya)", "rashi_name": "Kanni (Virgo)", "house_number": 6, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Ketu", "rashi_name": "Vrischigam (Scorpio)", "house_number": 8, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Mars (Sevvai)", "rashi_name": "Makaram (Capricorn)", "house_number": 10, "is_retrograde": false },
+      { "person_id": "002KUMAR", "chart_type": "D9", "body_name": "Venus (Sukra)", "rashi_name": "Kumbam (Aquarius)", "house_number": 11, "is_retrograde": false }
+    ]
   }
 }

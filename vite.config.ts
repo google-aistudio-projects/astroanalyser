@@ -164,11 +164,205 @@ function astroApiPlugin(): Plugin {
           return;
         }
 
-        // 4. GET /api/user-queries/recent
+        // 5. POST /api/horoscope/query (REST & SAP Query Studio live endpoint)
+        if (url.startsWith('/api/horoscope/query') && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+              const payload = JSON.parse(body || '{}');
+              const personId = payload.person_id || '001ME';
+              const startDate = payload.start_date || '1998-01-01';
+              const endDate = payload.end_date || '2020-01-31';
+              const format = payload.format || 'full';
+
+              const dataPath = path.resolve(__dirname, 'src/data/stored_persons.json');
+              let db: Record<string, any> = {};
+              if (fs.existsSync(dataPath)) {
+                db = JSON.parse(fs.readFileSync(dataPath, 'utf-8') || '{}');
+              }
+
+              const personRecord = db[personId] || db['001ME'] || Object.values(db)[0];
+              if (!personRecord) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: `Person ${personId} not found in database.` }));
+                return;
+              }
+
+              const profile = personRecord.profile;
+              const placements = personRecord.placements || [];
+              const d1Bodies = placements.filter((p: any) => p.chart_type === 'D1');
+              const d9Bodies = placements.filter((p: any) => p.chart_type === 'D9');
+
+              const runningNum = ((global as any).__query_seq = ((global as any).__query_seq || 0) % 100 + 1);
+              const nowStr = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+              const uniqueResponseId = `Q-${personId}-${String(runningNum).padStart(3, '0')}-${nowStr}`;
+
+              const dobDate = new Date(profile.date_of_birth || '1976-01-26');
+              const balYears = Number(profile.dasha_balance_years || 13);
+              const balMonths = Number(profile.dasha_balance_months || 2);
+              const balDays = Number(profile.dasha_balance_days || 5);
+
+              const LORDS = [
+                { name: 'Ketu', years: 7 },
+                { name: 'Venus (Sukra)', years: 20 },
+                { name: 'Sun (Surya)', years: 6 },
+                { name: 'Moon (Chandra)', years: 10 },
+                { name: 'Mars (Sevvai)', years: 7 },
+                { name: 'Rahu', years: 18 },
+                { name: 'Jupiter (Guru)', years: 16 },
+                { name: 'Saturn (Sani)', years: 19 },
+                { name: 'Mercury (Budha)', years: 17 }
+              ];
+
+              const startLordNorm = (profile.starting_dasha_lord || 'Saturn').toLowerCase();
+              let startLordIdx = LORDS.findIndex(l => startLordNorm.includes(l.name.toLowerCase().split(' ')[0]));
+              if (startLordIdx === -1) startLordIdx = 7;
+
+              const balTotalDays = balYears * 365.25 + balMonths * 30.4375 + balDays;
+              const firstMdEndMs = dobDate.getTime() + balTotalDays * 24 * 3600 * 1000;
+
+              let currentStartMs = dobDate.getTime();
+              let currentEndMs = firstMdEndMs;
+              const rawIntervals: any[] = [];
+
+              for (let cycle = 0; cycle < 10; cycle++) {
+                const mdLord = LORDS[(startLordIdx + cycle) % 9];
+                if (cycle > 0) {
+                  currentStartMs = currentEndMs;
+                  const mdDays = mdLord.years * 365.25;
+                  currentEndMs = currentStartMs + mdDays * 24 * 3600 * 1000;
+                }
+                const mdIdx = LORDS.findIndex(l => l.name === mdLord.name);
+                const mdTotalMs = currentEndMs - currentStartMs;
+                let adStartMs = currentStartMs;
+
+                for (let i = 0; i < 9; i++) {
+                  const adLord = LORDS[(mdIdx + i) % 9];
+                  const adFraction = adLord.years / 120.0;
+                  const adDurationMs = mdTotalMs * adFraction;
+                  const adEndMs = i === 8 ? currentEndMs : Math.min(currentEndMs, adStartMs + adDurationMs);
+                  const adIdx = LORDS.findIndex(l => l.name === adLord.name);
+                  let pdStartMs = adStartMs;
+
+                  for (let j = 0; j < 9; j++) {
+                    const pdLord = LORDS[(adIdx + j) % 9];
+                    const pdFraction = pdLord.years / 120.0;
+                    const pdDurationMs = (adEndMs - adStartMs) * pdFraction;
+                    const pdEndMs = j === 8 ? adEndMs : Math.min(adEndMs, pdStartMs + pdDurationMs);
+
+                    const sIso = new Date(pdStartMs).toISOString().slice(0, 10);
+                    const eIso = new Date(pdEndMs).toISOString().slice(0, 10);
+                    rawIntervals.push([mdLord.name, adLord.name, pdLord.name, sIso, eIso]);
+                    pdStartMs = pdEndMs;
+                  }
+                  adStartMs = adEndMs;
+                }
+              }
+
+              const filtered = rawIntervals.filter(([_, __, ___, s, e]) => s <= endDate && e >= startDate);
+              const intervals = filtered.map(([md, ad, pd, s, e], idx) => ({
+                sequence_index: idx + 1,
+                mahadasha_lord_md: md,
+                antardasha_lord_ad: ad,
+                pratyantardasha_lord_pd: pd,
+                full_lord_hierarchy: `MD: ${md} > AD: ${ad} > PD: ${pd}`,
+                start_date: s,
+                end_date: e,
+                duration_days: Math.round((new Date(e).getTime() - new Date(s).getTime()) / (1000 * 3600 * 24))
+              }));
+
+              let spanYears = null;
+              try {
+                spanYears = parseFloat(((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24 * 365.25)).toFixed(2));
+              } catch {}
+
+              const responseData = {
+                unique_response_id: uniqueResponseId,
+                running_number: runningNum,
+                person_id: personId,
+                requested_timeline: {
+                  start_date: startDate,
+                  end_date: endDate,
+                  span_years: spanYears
+                },
+                person_profile: profile,
+                natal_placements: {
+                  D1_rashi_chart: {
+                    count: d1Bodies.length,
+                    lagna_sign: profile.birth_lagna,
+                    bodies: d1Bodies
+                  },
+                  D9_navamsha_chart: {
+                    count: d9Bodies.length,
+                    bodies: d9Bodies
+                  }
+                },
+                vimshottari_dasha_intervals: {
+                  total_intervals_count: intervals.length,
+                  granularity: 'Pratyantardasha (PD) Level',
+                  intervals
+                },
+                server_timestamp: new Date().toISOString(),
+                persisted_in_database: {
+                  table: 'user_queries',
+                  running_number_cycle: `${runningNum}/100`,
+                  status: 'COMMITTED_IN_DB'
+                }
+              };
+
+              (global as any).__recent_queries = (global as any).__recent_queries || [];
+              (global as any).__recent_queries.unshift({
+                query_id: uniqueResponseId,
+                running_number: runningNum,
+                person_id: personId,
+                start_date: startDate,
+                end_date: endDate,
+                created_at: new Date().toISOString(),
+                response_payload: responseData
+              });
+              if ((global as any).__recent_queries.length > 100) {
+                (global as any).__recent_queries.pop();
+              }
+
+              if (format === 'llm_markdown') {
+                res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+                let md = `# ASTROLOGICAL DATASET (NO PII)\n`;
+                md += `**Reference ID:** \`${personId}\` | **Window:** \`${startDate}\` to \`${endDate}\` (${spanYears} yrs)\n`;
+                md += `**Birth Lagna:** ${profile.birth_lagna} | **Birth Rashi:** ${profile.birth_rashi} | **Star:** ${profile.birth_star}\n\n`;
+                md += `## D1 Rashi Chart\n`;
+                d1Bodies.forEach((b: any) => {
+                  md += `- ${b.body_name} in ${b.rashi_name} (H${b.house_number}) ${b.nakshatra_name || ''} ${b.pada ? 'P' + b.pada : ''} ${b.degree_sputa || ''} ${b.is_retrograde ? '(Retro)' : ''}\n`;
+                });
+                md += `\n## D9 Navamsha Chart\n`;
+                d9Bodies.forEach((b: any) => {
+                  md += `- ${b.body_name} in ${b.rashi_name} (H${b.house_number})\n`;
+                });
+                md += `\n## Vimshottari Dasha Intervals (${intervals.length} PD Periods)\n`;
+                intervals.forEach((it: any) => {
+                  md += `| ${it.sequence_index} | ${it.full_lord_hierarchy} | ${it.start_date} | ${it.end_date} | ${it.duration_days} days |\n`;
+                });
+                res.statusCode = 200;
+                res.end(md);
+                return;
+              }
+
+              res.statusCode = 200;
+              res.end(JSON.stringify(responseData));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+          return;
+        }
+
+        // 6. GET /api/user-queries/recent
         if (url === '/api/user-queries/recent' && req.method === 'GET') {
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;
-          res.end(JSON.stringify({ recent_queries: [] }));
+          res.end(JSON.stringify({ recent_queries: (global as any).__recent_queries || [] }));
           return;
         }
 

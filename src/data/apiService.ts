@@ -381,7 +381,7 @@ export const samplePlacementsKumar: NatalPlacement[] = [
   { person_id: "002KUMAR", chart_type: "D1", body_name: "Ketu", rashi_name: "Vrischigam (Scorpio)", house_number: 8, nakshatra_name: "Anuradha", pada: 4, degree_sputa: "14° 05'", is_retrograde: false }
 ];
 
-// Ingested Persons In-Memory Registry (persists parsed PDFs for REST API and Charts)
+// Ingested Persons In-Memory Registry (authoritative DB data store)
 export const ingestedPersonsRegistry: Record<string, {
   profile: PersonMaster;
   placements: NatalPlacement[];
@@ -390,24 +390,12 @@ export const ingestedPersonsRegistry: Record<string, {
   ...(storedPersonsData as any)
 };
 
-// Clean out stale or corrupted localStorage data and guarantee authoritative DB records
+// Clear any old stale caches from browser storage so live data is always authoritative
 if (typeof window !== 'undefined') {
   try {
-    const saved = localStorage.getItem('astro_persons_db');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      for (const k of Object.keys(parsed)) {
-        // Do NOT let stale localStorage overwrite authoritative DB records
-        if (!storedPersonsData[k as keyof typeof storedPersonsData]) {
-          ingestedPersonsRegistry[k] = parsed[k];
-        }
-      }
-    }
-    // Update localStorage to reflect clean authoritative store
-    localStorage.setItem('astro_persons_db', JSON.stringify(ingestedPersonsRegistry));
-  } catch (e) {
-    console.warn('Storage sync notice:', e);
-  }
+    localStorage.removeItem('astro_persons_db');
+    localStorage.removeItem('astro_active_person_id');
+  } catch {}
 }
 
 export async function fetchPersonDetailsFromBackend(personId: string) {

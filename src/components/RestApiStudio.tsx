@@ -174,6 +174,11 @@ export default function RestApiStudio({
     testBackendConnection();
   }, [apiBaseUrl]);
 
+  // Automatically refresh and execute query whenever the person ID changes from the top dropdown
+  useEffect(() => {
+    handleRunQuery();
+  }, [apiPersonId]);
+
   const handleRunQuery = async () => {
     setLoading(true);
     try {
