@@ -8,7 +8,8 @@ import {
   Server,
   Table,
   User,
-  Database
+  Database,
+  FileUp
 } from 'lucide-react';
 import {
   samplePersonMaster,
@@ -26,6 +27,7 @@ import {
 import storedPersonsData from './data/stored_persons.json';
 import RestApiStudio, { getStarLordShort } from './components/RestApiStudio';
 import { MonthlyTransitView } from './components/MonthlyTransitView';
+import PdfIngestionStudio from './components/PdfIngestionStudio';
 
 // Standard 12 South Indian chart cell coordinate mappings (row, col)
 // 0,0: Meenam (Pisces)   | 0,1: Mesham (Aries)   | 0,2: Rishabam (Taurus) | 0,3: Mithunam (Gemini)
@@ -60,7 +62,7 @@ const SOUTH_INDIAN_CELLS: ChartCellDef[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'charts' | 'monthly' | 'api'>('charts');
+  const [activeTab, setActiveTab] = useState<'overview' | 'charts' | 'monthly' | 'api' | 'pdf_ingest'>('charts');
   const [selectedChart, setSelectedChart] = useState<'D1' | 'D9'>('D1');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -231,12 +233,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* Clean 3 Navigation Menu Items */}
+          {/* Integrated Navigation Menu Items */}
           <nav className="flex items-center gap-1.5 flex-wrap">
             {[
+              { id: 'overview', label: 'Horoscope Overview', icon: Sparkles },
               { id: 'charts', label: 'South Indian Chart Visualizer', icon: Compass },
               { id: 'monthly', label: 'Monthly View', icon: CalendarDays },
               { id: 'api', label: 'SAP Query Studio', icon: Server },
+              { id: 'pdf_ingest', label: 'Upload & Ingest PDF', icon: FileUp },
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;

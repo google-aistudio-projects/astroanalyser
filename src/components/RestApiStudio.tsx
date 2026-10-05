@@ -156,6 +156,14 @@ export default function RestApiStudio({
   const [lastFetchMeta, setLastFetchMeta] = useState<{ source: 'live_server' | 'fallback_simulator'; statusCode: number; durationMs: number; error?: string; endpointUsed?: string } | null>(null);
   const [rawServerMarkdown, setRawServerMarkdown] = useState<string | null>(null);
 
+  // Resolved transit timeline: always guarantees 9 Grahas Gochara timeline for all views
+  const activeTransitTimeline = useMemo(() => {
+    if (apiResponse?.transit_ephemeris_timeline) {
+      return apiResponse.transit_ephemeris_timeline;
+    }
+    return executeHoroscopeTimelineQuery(apiPersonId, apiStartDate, apiEndDate).transit_ephemeris_timeline;
+  }, [apiResponse, apiPersonId, apiStartDate, apiEndDate]);
+
   const testBackendConnection = async (targetUrl?: string) => {
     const urlToTest = targetUrl !== undefined ? targetUrl : apiBaseUrl;
     setPinging(true);
@@ -914,7 +922,7 @@ print(prompt_markdown[:400])
           )}
 
           {/* SUB-TAB: TRANSIT EPHEMERIS (GOCHARA) */}
-          {activeSubTab === 'transit' && apiResponse.transit_ephemeris_timeline && (
+          {activeSubTab === 'transit' && activeTransitTimeline && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-4">
                 <div>
@@ -936,7 +944,7 @@ print(prompt_markdown[:400])
                         transitViewMode === 'timeline_events' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      Sign Ingress Events ({apiResponse.transit_ephemeris_timeline.major_transits_timeline_count})
+                      Sign Ingress Events ({activeTransitTimeline.major_transits_timeline_count})
                     </button>
                     <button
                       onClick={() => setTransitViewMode('saturn_tracker')}
@@ -972,10 +980,10 @@ print(prompt_markdown[:400])
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-300">Native's Baseline Reference:</span>
                     <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold">
-                      Lagna: {apiResponse.transit_ephemeris_timeline.natal_reference.natal_lagna_sign}
+                      Lagna: {activeTransitTimeline.natal_reference.natal_lagna_sign}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold">
-                      Janma Rashi: {apiResponse.transit_ephemeris_timeline.natal_reference.natal_rashi_sign}
+                      Janma Rashi: {activeTransitTimeline.natal_reference.natal_rashi_sign}
                     </span>
                   </div>
                   <div className="text-[11px] text-amber-300/90 font-mono">
@@ -1019,13 +1027,16 @@ print(prompt_markdown[:400])
                 {/* Quick Graha Filter Pills */}
                 <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
                   {[
-                    { key: 'all', label: 'All Grahas (அனைத்தும்)', icon: '🌟' },
+                    { key: 'all', label: 'All 9 Grahas (9 கிரகங்கள்)', icon: '🌟' },
                     { key: 'Saturn', label: 'Saturn (சனி)', icon: '🪐' },
                     { key: 'Jupiter', label: 'Jupiter (குரு)', icon: '⭐' },
                     { key: 'Rahu', label: 'Rahu (ராகு)', icon: '🐉' },
                     { key: 'Ketu', label: 'Ketu (கேது)', icon: '☄️' },
                     { key: 'Mars', label: 'Mars (செவ்வாய்)', icon: '🔴' },
                     { key: 'Sun', label: 'Sun (சூரியன்)', icon: '☀️' },
+                    { key: 'Venus', label: 'Venus (சுக்கிரன்)', icon: '✨' },
+                    { key: 'Mercury', label: 'Mercury (புதன்)', icon: '🟢' },
+                    { key: 'Moon', label: 'Moon (சந்திரன்)', icon: '🌙' },
                   ].map(tab => {
                     const isSelected = selectedGrahaFilter === tab.key;
                     return (
@@ -1066,6 +1077,9 @@ print(prompt_markdown[:400])
                   { key: 'Ketu', name: 'Ketu (கேது)', icon: '☄️', speed: '~1.5 yrs / sign (Rx)', border: 'border-rose-500/30', headerColor: 'text-rose-400' },
                   { key: 'Mars', name: 'Mars (Sevvai / செவ்வாய்)', icon: '🔴', speed: '~45 days / sign', border: 'border-red-500/30', headerColor: 'text-red-400' },
                   { key: 'Sun', name: 'Sun (Surya / சூரியன்)', icon: '☀️', speed: '~30 days / sign', border: 'border-orange-500/30', headerColor: 'text-orange-400' },
+                  { key: 'Venus', name: 'Venus (Sukra / சுக்கிரன்)', icon: '✨', speed: '~30 days / sign', border: 'border-emerald-500/30', headerColor: 'text-emerald-400' },
+                  { key: 'Mercury', name: 'Mercury (Budha / புதன்)', icon: '🟢', speed: '~25 days / sign', border: 'border-green-500/30', headerColor: 'text-green-400' },
+                  { key: 'Moon', name: 'Moon (Chandra / சந்திரன்)', icon: '🌙', speed: '~2.25 days / sign', border: 'border-cyan-500/30', headerColor: 'text-cyan-400' },
                 ];
 
                 const matchingGrahas = ALL_GRAHAS_META.filter(g => {
@@ -1073,7 +1087,7 @@ print(prompt_markdown[:400])
                   const matchesSearch = !transitSearch.trim() ||
                     g.name.toLowerCase().includes(transitSearch.toLowerCase()) ||
                     g.key.toLowerCase().includes(transitSearch.toLowerCase()) ||
-                    apiResponse.transit_ephemeris_timeline.major_transits_timeline.some(ev =>
+                    activeTransitTimeline.major_transits_timeline.some(ev =>
                       ev.graha_name.toLowerCase().includes(g.key.toLowerCase()) &&
                       (ev.transit_rashi_name.toLowerCase().includes(transitSearch.toLowerCase()) ||
                         ev.start_date.includes(transitSearch) ||
@@ -1102,7 +1116,7 @@ print(prompt_markdown[:400])
                 return (
                   <div className="space-y-3">
                     {matchingGrahas.map(g => {
-                      const planetIngresses = apiResponse.transit_ephemeris_timeline.major_transits_timeline.filter(
+                      const planetIngresses = activeTransitTimeline.major_transits_timeline.filter(
                         ev => ev.graha_name.toLowerCase().includes(g.key.toLowerCase())
                       );
 
@@ -1203,8 +1217,8 @@ print(prompt_markdown[:400])
                         This table shows where the 9 Grahas were on <em>this exact single day</em>. On this start date, Saturn happened to be in{' '}
                         <strong className="text-amber-300">
                           {transitViewMode === 'snapshot_start'
-                            ? apiResponse.transit_ephemeris_timeline.transit_snapshot_start.find(g => g.graha_key === 'Saturn')?.transit_rashi_name
-                            : apiResponse.transit_ephemeris_timeline.transit_snapshot_end.find(g => g.graha_key === 'Saturn')?.transit_rashi_name}
+                            ? activeTransitTimeline.transit_snapshot_start.find(g => g.graha_key === 'Saturn')?.transit_rashi_name
+                            : activeTransitTimeline.transit_snapshot_end.find(g => g.graha_key === 'Saturn')?.transit_rashi_name}
                         </strong>
                         . It did <strong>NOT</strong> stay there for years! To see all dates when Saturn changed signs, switch to{' '}
                         <button
@@ -1236,18 +1250,18 @@ print(prompt_markdown[:400])
                         <th className="py-2.5 px-3">Degree (Sputa)</th>
                         <th className="py-2.5 px-3">Nakshatra &amp; Pada</th>
                         <th className="py-2.5 px-3 text-center bg-cyan-950/30 text-cyan-300">
-                          Relative to Lagna (Dhanus)
+                          Relative to Lagna ({activeTransitTimeline.natal_reference.natal_lagna_sign.split(' ')[0]})
                         </th>
                         <th className="py-2.5 px-3 text-center bg-rose-950/30 text-rose-300">
-                          Relative to Moon (Vrischigam)
+                          Relative to Moon ({activeTransitTimeline.natal_reference.natal_rashi_sign.split(' ')[0]})
                         </th>
                         <th className="py-2.5 px-3 text-center">Motion</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 text-slate-300">
                       {(transitViewMode === 'snapshot_start'
-                        ? apiResponse.transit_ephemeris_timeline.transit_snapshot_start
-                        : apiResponse.transit_ephemeris_timeline.transit_snapshot_end
+                        ? activeTransitTimeline.transit_snapshot_start
+                        : activeTransitTimeline.transit_snapshot_end
                       ).map(g => (
                         <tr key={g.graha_key} className="hover:bg-slate-800/40">
                           <td className="py-2.5 px-3 font-bold text-white flex items-center gap-1.5">
@@ -1346,7 +1360,7 @@ print(prompt_markdown[:400])
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800 text-slate-300">
-                        {apiResponse.transit_ephemeris_timeline.major_transits_timeline
+                        {activeTransitTimeline.major_transits_timeline
                           .filter(ev => {
                             const matchesGraha = selectedGrahaFilter === 'all' || ev.graha_name.toLowerCase().includes(selectedGrahaFilter.toLowerCase());
                             const matchesSearch = !transitSearch.trim() ||
@@ -1433,7 +1447,7 @@ print(prompt_markdown[:400])
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800 text-slate-300">
-                        {apiResponse.transit_ephemeris_timeline.major_transits_timeline
+                        {activeTransitTimeline.major_transits_timeline
                           .filter(ev => ev.graha_name.includes('Saturn') || ev.graha_name.includes('சனி'))
                           .map((ev, idx) => {
                             let durStr = '-';

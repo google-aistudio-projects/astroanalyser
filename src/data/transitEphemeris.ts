@@ -331,7 +331,7 @@ export function generateClientTransitTimeline(
   const snapshotEnd = planets.map(p => getGrahaTransitPosition(p, dEnd, natalLagnaIdx, natalRashiIdx));
 
   const stepDays = totalDays > 1800 ? 15 : (totalDays > 365 ? 7 : (totalDays > 90 ? 3 : 1));
-  const tracked = ["Jupiter", "Saturn", "Rahu", "Ketu", "Mars", "Sun"];
+  const tracked = ["Jupiter", "Saturn", "Rahu", "Ketu", "Mars", "Sun", "Venus", "Mercury", ...(totalDays <= 365 ? ["Moon"] : [])];
   const timelineEvents: TransitTimelineEvent[] = [];
 
   for (const p of tracked) {

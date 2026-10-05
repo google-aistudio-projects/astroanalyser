@@ -677,6 +677,11 @@ export async function fetchHoroscopeFromApi(
           };
         } else {
           const json = await res.json();
+          // Ensure transit_ephemeris_timeline for 9 Grahas is never missing
+          if (!json.transit_ephemeris_timeline) {
+            const fallbackJson = executeHoroscopeTimelineQuery(personId, startDate, endDate);
+            json.transit_ephemeris_timeline = fallbackJson.transit_ephemeris_timeline;
+          }
           return {
             data: json,
             source: 'live_server',
